@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from discord import Embed, Color
 import os
 from dotenv import load_dotenv
+from collections import defaultdict
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -209,14 +210,30 @@ async def fixtures(ctx, *, team_name=None):
             upcoming_fixtures = [f for f in fixtures_data if f['event'] == current_gw + 1]
             upcoming_fixtures.sort(key=lambda x: x['kickoff_time'])
             
+            # Group fixtures by day
+            fixtures_by_day = defaultdict(list)
+            for fixture in upcoming_fixtures:
+                kickoff_time = datetime.strptime(fixture['kickoff_time'], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                day_key = kickoff_time.strftime("%A")  # Get day name
+                fixtures_by_day[day_key].append(fixture)
+            
             embed = discord.Embed(title=f"Upcoming Fixtures - Gameweek {current_gw + 1}", color=discord.Color.blue())
             
-            for fixture in upcoming_fixtures[:10]:  # Limit to 10 fixtures to avoid hitting embed limit
-                home_team = team_map[fixture['team_h']]['name']
-                away_team = team_map[fixture['team_a']]['name']
-                kickoff_time = datetime.strptime(fixture['kickoff_time'], "%Y-%m-%dT%H:%M:%SZ")
-                fixture_str = f"{home_team} vs {away_team} - <t:{int(kickoff_time.timestamp())}:R>"
-                embed.add_field(name="\u200b", value=fixture_str, inline=False)
+            for day, fixtures in fixtures_by_day.items():
+                fixture_strings = []
+                for fixture in fixtures:
+                    home_team = team_map[fixture['team_h']]['name']
+                    away_team = team_map[fixture['team_a']]['name']
+                    kickoff_time = datetime.strptime(fixture['kickoff_time'], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                    unix_timestamp = int(kickoff_time.timestamp())
+                    time_diff = kickoff_time - datetime.now(timezone.utc)
+                    days_until = time_diff.days + 1  # +1 because we want to show "in 1 day" on the day before
+                    fixture_str = f"{home_team} vs {away_team} - in {days_until} day{'s' if days_until != 1 else ''}, <t:{unix_timestamp}:t> <t:{unix_timestamp}:D>"
+                    fixture_strings.append(fixture_str)
+                
+                # Join all fixtures for this day into a single string
+                day_fixtures = "\n".join(fixture_strings)
+                embed.add_field(name=f"**{day}**", value=day_fixtures, inline=False)
             
             await ctx.send(embed=embed)
 
