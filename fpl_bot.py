@@ -19,26 +19,26 @@ bot = commands.Bot(command_prefix='!', intents=intents)
 
 # Team aliases for fuzzy matching
 team_aliases = {
-    "arsenal": ["arsenal", "ars"],
-    "aston villa": ["aston villa", "villa", "avl"],
-    "bournemouth": ["bournemouth", "bou"],
-    "brentford": ["brentford", "bre"],
-    "brighton": ["brighton", "brighton and hove albion", "bha"],
-    "burnley": ["burnley", "bur"],
-    "chelsea": ["chelsea", "che"],
-    "crystal palace": ["crystal palace", "palace", "cry"],
-    "everton": ["everton", "eve"],
-    "fulham": ["fulham", "ful"],
-    "liverpool": ["liverpool", "liv"],
-    "luton": ["luton", "luton town", "lut"],
-    "manchester city": ["manchester city", "man city", "city", "mci"],
-    "manchester united": ["manchester united", "man united", "united", "mun"],
-    "newcastle": ["newcastle", "newcastle united", "new"],
-    "nottingham forest": ["nottingham forest", "forest", "nfo"],
-    "sheffield united": ["sheffield united", "sheffield", "shu"],
-    "tottenham": ["tottenham", "tottenham hotspur", "spurs", "tot"],
-    "west ham": ["west ham", "west ham united", "whu"],
-    "wolves": ["wolves", "wolverhampton", "wolverhampton wanderers", "wol"]
+    "Arsenal": ["arsenal", "ars", "gunners", "arsenal fc", "the gunners", "the arsenal", "arsenal fc", "gooners", "the gooners"],
+    "Aston Villa": ["aston villa", "villa", "avl", "villians", "aston villa fc", "avfc", "the villians", "villans", "the villans"],
+    "Bournemouth": ["bournemouth", "bou", "bournemouth fc", "cherries", "afc bournemouth", "the cherries"],
+    "Brentford": ["brentford", "bre", "brentford fc", "the bees"],
+    "Brighton": ["brighton", "brighton and hove albion", "bha", "seagulls", "brighton fc", "the seagulls"],
+    "Chelsea": ["chelsea", "che", "blues", "chels", "chelsea fc", "the blues"],
+    "Crystal Palace": ["crystal palace", "palace", "cry", "cpfc", "eagles", "crystal palace fc", "the eagles"],
+    "Everton": ["everton", "eve", "toffees", "everton fc", "the toffees"],
+    "Fulham": ["fulham", "ful", "fulham fc", "the cottagers", "cottagers"],
+    "Ipswich": ["ipswich", "ipswich town", "ips"],
+    "Leicester": ["leicester", "leicester city", "lei", "foxes", "the foxes"],
+    "Liverpool": ["liverpool", "liv", "liverpool fc", "pool", "the reds", "reds"],
+    "Man City": ["manchester city", "man city", "city", "mci", "cityzens", "mcfc", "the citizens", "the blues"],
+    "Man Utd": ["manchester united", "man united", "united", "mun", 'utd', 'man utd', "mufc", "mu", "red devils", "reddevils", "the red devils", "the reddevils"],
+    "Newcastle": ["newcastle", "newcastle united", "new", 'nufc', 'newcastle', "magpies", "the magpies"],
+    "Nott'm Forest": ["nottingham forest", "nottm forest", "forest", "nfo", "nottingham", "trouts", "forest fc"],
+    "Southampton": ["southampton", "saints", "sou", "southampton fc", "the saints"],
+    "Spurs": ["tottenham", "tottenham hotspur", "spurs", "tot", "thfc", "hotspurs", "spurs fc", "the spurs", "lilywhites", "the lilywhites"],
+    "West Ham": ["west ham", "west ham united", "whu", "hammers", "west ham united fc", "the hammers", "the irons", "irons"],
+    "Wolves": ["wolves", "wolverhampton", "wolverhampton wanderers", "wol", "wolves fc", "the wolves"]
 }
 
 # Base URL for the FPL API
@@ -141,9 +141,13 @@ async def player(ctx, *, player_name):
 # Command to get fixtures
 @bot.command()
 async def fixtures(ctx, *, team_name=None):
+    print("Teams in the data:")
     try:
         fixtures_data = await fetch_fpl_data("fixtures/")
         teams_data = await fetch_fpl_data("bootstrap-static/")
+
+        for team in teams_data['teams']:
+            print(f"{team['name']}: {team['id']}")
 
         team_map = {team['id']: team for team in teams_data['teams']}
         current_gw = next(gw for gw in teams_data['events'] if gw['is_current'])['id']
@@ -159,15 +163,20 @@ async def fixtures(ctx, *, team_name=None):
             team_name_lower = team_name.lower()
             matched_team = None
             for full_name, aliases in team_aliases.items():
-                if team_name_lower in aliases:
+                if team_name_lower in [alias.lower() for alias in aliases] or team_name_lower == full_name.lower():
                     matched_team = full_name
                     break
             
             if matched_team:
                 team_id = next((team['id'] for team in teams_data['teams'] 
-                                if team['name'].lower() == matched_team), None)
+                                if team['name'] == matched_team), None)
+                print(f"Matched team: {matched_team}, Team ID: {team_id}")
             else:
                 await ctx.send(f"Team '{team_name}' not found. Please check the spelling.")
+                return
+
+            if team_id is None:
+                await ctx.send(f"Error: Unable to find team ID for {matched_team}. Please try again later.")
                 return
 
             current_time = datetime.now(timezone.utc)
@@ -201,6 +210,11 @@ async def fixtures(ctx, *, team_name=None):
                 
                 embed = Embed(description=fixture_text, color=get_fdr_color(fdr))
                 embeds.append(embed)
+
+            print(f"Team ID for {matched_team}: {team_id}")
+            print(f"Number of fixtures found: {len(team_fixtures)}")
+            for fixture in team_fixtures[:5]:
+                print(f"Fixture: {fixture}")
 
         else:
             next_gw = current_gw + 1
