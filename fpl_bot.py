@@ -4,7 +4,7 @@ import aiohttp
 import asyncio
 from fuzzywuzzy import process
 import difflib
-from datetime import datetime
+from datetime import datetime, timezone
 from discord import Embed, Color
 import os
 from dotenv import load_dotenv
@@ -138,7 +138,15 @@ async def fixtures(ctx, *, team_name=None):
                 await ctx.send(f"Team '{team_name}' not found. Please check the spelling.")
                 return
 
-            team_fixtures = [f for f in fixtures_data if f['team_h'] == team_id or f['team_a'] == team_id]
+            current_time = datetime.now(timezone.utc)
+
+            upcoming_fixtures = [
+                fixture for fixture in fixtures_data
+                if datetime.strptime(fixture['kickoff_time'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc) > current_time
+            ]
+
+            # Use upcoming_fixtures instead of fixtures_data
+            team_fixtures = [f for f in upcoming_fixtures if f['team_h'] == team_id or f['team_a'] == team_id]
             team_fixtures.sort(key=lambda x: x['event'])
 
             title_embed = Embed(title=f"Upcoming fixtures for {team_name}", color=Color.blue())
