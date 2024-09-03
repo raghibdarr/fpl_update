@@ -350,24 +350,33 @@ async def fetch_league_standings(league_id):
     async with aiohttp.ClientSession() as session:
         async with session.get(url) as resp:
             if resp.status != 200:
-                raise Exception(f"API request failed with status {resp.status}")
+                raise Exception(f"League API request failed with status {resp.status}")
             data = await resp.json()
     
     standings = data['standings']['results']
     
-    # Fetch additional data for each team
-    for entry in standings:
+    async def fetch_team_data(entry):
         team_id = entry['entry']
         team_url = f"https://fantasy.premierleague.com/api/entry/{team_id}/"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(team_url) as resp:
-                if resp.status == 200:
-                    team_data = await resp.json()
-                    entry['value'] = team_data.get('value', 0)
-                    entry['overall_rank'] = team_data.get('overall_rank', 'N/A')
-                else:
-                    entry['value'] = 0
-                    entry['overall_rank'] = 'N/A'
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(team_url) as resp:
+                    if resp.status == 200:
+                        team_data = await resp.json()
+                        entry['value'] = team_data.get('value', 0)
+                        entry['overall_rank'] = team_data.get('overall_rank', 'N/A')
+                        print(f"Fetched data for team {team_id}: Value={entry['value']}, OR={entry['overall_rank']}")
+                    else:
+                        print(f"Team API request failed for team {team_id} with status {resp.status}")
+                        entry['value'] = 0
+                        entry['overall_rank'] = 'N/A'
+        except Exception as e:
+            print(f"Error fetching data for team {team_id}: {str(e)}")
+            entry['value'] = 0
+            entry['overall_rank'] = 'N/A'
+    
+    # Fetch team data concurrently
+    await asyncio.gather(*[fetch_team_data(entry) for entry in standings])
     
     return standings
 
