@@ -17,6 +17,30 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+# Team aliases for fuzzy matching
+team_aliases = {
+    "arsenal": ["arsenal", "ars"],
+    "aston villa": ["aston villa", "villa", "avl"],
+    "bournemouth": ["bournemouth", "bou"],
+    "brentford": ["brentford", "bre"],
+    "brighton": ["brighton", "brighton and hove albion", "bha"],
+    "burnley": ["burnley", "bur"],
+    "chelsea": ["chelsea", "che"],
+    "crystal palace": ["crystal palace", "palace", "cry"],
+    "everton": ["everton", "eve"],
+    "fulham": ["fulham", "ful"],
+    "liverpool": ["liverpool", "liv"],
+    "luton": ["luton", "luton town", "lut"],
+    "manchester city": ["manchester city", "man city", "city", "mci"],
+    "manchester united": ["manchester united", "man united", "united", "mun"],
+    "newcastle": ["newcastle", "newcastle united", "new"],
+    "nottingham forest": ["nottingham forest", "forest", "nfo"],
+    "sheffield united": ["sheffield united", "sheffield", "shu"],
+    "tottenham": ["tottenham", "tottenham hotspur", "spurs", "tot"],
+    "west ham": ["west ham", "west ham united", "whu"],
+    "wolves": ["wolves", "wolverhampton", "wolverhampton wanderers", "wol"]
+}
+
 # Base URL for the FPL API
 FPL_API_BASE = "https://fantasy.premierleague.com/api/"
 
@@ -132,9 +156,17 @@ async def fixtures(ctx, *, team_name=None):
         embeds = []
 
         if team_name:
-            team_id = next((team['id'] for team in teams_data['teams'] 
-                            if team['name'].lower() == team_name.lower()), None)
-            if team_id is None:
+            team_name_lower = team_name.lower()
+            matched_team = None
+            for full_name, aliases in team_aliases.items():
+                if team_name_lower in aliases:
+                    matched_team = full_name
+                    break
+            
+            if matched_team:
+                team_id = next((team['id'] for team in teams_data['teams'] 
+                                if team['name'].lower() == matched_team), None)
+            else:
                 await ctx.send(f"Team '{team_name}' not found. Please check the spelling.")
                 return
 
@@ -149,7 +181,7 @@ async def fixtures(ctx, *, team_name=None):
             team_fixtures = [f for f in upcoming_fixtures if f['team_h'] == team_id or f['team_a'] == team_id]
             team_fixtures.sort(key=lambda x: x['event'])
 
-            title_embed = Embed(title=f"Upcoming fixtures for {team_name}", color=Color.blue())
+            title_embed = Embed(title=f"Upcoming fixtures for {matched_team.title()}", color=Color.blue())
             embeds.append(title_embed)
 
             for fixture in team_fixtures[:5]:
