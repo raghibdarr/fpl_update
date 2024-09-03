@@ -373,12 +373,15 @@ def create_leaderboard_image(standings):
         # Draw rank
         draw.text((20, row_center), str(entry['rank']), font=font_regular, fill='black', anchor="lm")
         
-        # Draw arrow
+        # Draw arrow or indicator
         arrow_y = row_center
         if entry['rank'] < entry['last_rank']:
             draw.polygon([(70, arrow_y - 8), (85, arrow_y + 8), (100, arrow_y - 8)], fill='green')  # Up arrow
         elif entry['rank'] > entry['last_rank']:
             draw.polygon([(70, arrow_y + 8), (85, arrow_y - 8), (100, arrow_y + 8)], fill='red')  # Down arrow
+        else:
+            # Draw grey indicator for unchanged rank
+            draw.rectangle([(70, arrow_y - 6), (100, arrow_y + 6)], fill='grey')
         
         # Draw team name (slightly bold) and manager name (regular)
         draw_slightly_bold_text(rank_width + 20, row_center - 12, entry['entry_name'], font_bold)
