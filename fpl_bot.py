@@ -253,7 +253,11 @@ async def fixtures(ctx, *, team_name=None):
         await ctx.send(f"An error occurred while fetching fixtures. Please try again later.")
 
 @bot.command()
-async def link(ctx, fpl_id: int):
+async def link(ctx, fpl_id: int = None):
+    if fpl_id is None:
+        await ctx.send("Please provide your FPL ID. Usage: !link <your_fpl_id>")
+        return
+
     try:
         # Fetch user data from FPL API
         user_data = await fetch_fpl_data(f"entry/{fpl_id}/")
@@ -270,6 +274,12 @@ async def link(ctx, fpl_id: int):
     except Exception as e:
         print(f"An error occurred: {str(e)}")
         await ctx.send("An error occurred while linking your account. Please check your FPL ID and try again.")
+
+# Error handler for MissingRequiredArgument
+@link.error
+async def link_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send("Please provide your FPL ID. Usage: !link <your_fpl_id>")
 
 @bot.command()
 async def myteam(ctx):
