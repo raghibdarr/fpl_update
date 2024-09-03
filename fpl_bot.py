@@ -13,9 +13,23 @@ import aiosqlite
 from PIL import Image, ImageDraw, ImageFont
 import io
 
+# Load environment variables
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
 
+# FDR color mapping
+def get_fdr_color(difficulty):
+    if difficulty == 1:
+        return 0x375523  # Dark Green
+    elif difficulty == 2:
+        return 0x01FC7A  # Light Green
+    elif difficulty == 3:
+        return 0xE7E7E7  # Grey
+    elif difficulty == 4:
+        return 0xFF1751  # Light Red
+    else:
+        return 0x80072D  # Dark Red
+    
 # Bot setup
 intents = discord.Intents.default()
 intents.message_content = True
@@ -80,6 +94,7 @@ async def on_ready():
     print(f'Bot is in {len(bot.guilds)} guilds')
     await setup_database()
 
+# Command to say hello
 @bot.command()
 async def hello(ctx):
     print(f"Received hello command from {ctx.author}")
@@ -263,6 +278,7 @@ async def fixtures(ctx, *, team_name=None):
         print(f"An error occurred: {str(e)}")
         await ctx.send(f"An error occurred while fetching fixtures. Please try again later.")
 
+# Command to link FPL ID
 @bot.command()
 async def link(ctx, fpl_id: int = None):
     if fpl_id is None:
@@ -292,6 +308,7 @@ async def link_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
         await ctx.send("Please provide your FPL ID. Usage: !link <your_fpl_id>")
 
+# Command to get my team
 @bot.command()
 async def myteam(ctx):
     try:
@@ -308,6 +325,7 @@ async def myteam(ctx):
         print(f"An error occurred: {str(e)}")
         await ctx.send("An error occurred while fetching your team information.")
 
+# Command to get my points
 @bot.command()
 async def mypoints(ctx):
     try:
@@ -326,6 +344,7 @@ async def mypoints(ctx):
         print(f"An error occurred: {str(e)}")
         await ctx.send("An error occurred while fetching your points.")
 
+# Function to get league standings
 async def fetch_league_standings(league_id):
     url = f"https://fantasy.premierleague.com/api/leagues-classic/{league_id}/standings/"
     async with aiohttp.ClientSession() as session:
@@ -335,15 +354,15 @@ async def fetch_league_standings(league_id):
             data = await resp.json()
     return data['standings']['results']
 
+# Function to create leaderboard image
 def create_leaderboard_image(standings):
-    width, height = 1100, 70 + len(standings) * 60  # Increased dimensions
+    width, height = 1100, 70 + len(standings) * 60
     image = Image.new('RGB', (width, height), color='white')
     draw = ImageDraw.Draw(image)
     
-    # Use default font with increased sizes
-    font_regular = ImageFont.load_default().font_variant(size=24)  # Increased size
-    font_bold = ImageFont.load_default().font_variant(size=24)  # Same size as regular
-    font_header = ImageFont.load_default().font_variant(size=28)  # Kept the same
+    font_regular = ImageFont.load_default().font_variant(size=24)
+    font_bold = ImageFont.load_default().font_variant(size=24)
+    font_header = ImageFont.load_default().font_variant(size=28)
     
     # Define column widths
     rank_width = 90
@@ -351,23 +370,35 @@ def create_leaderboard_image(standings):
     gw_width = 90
     tot_width = 90
     
-    # Draw headers
-    draw.text((rank_width // 2, 20), "Rank", font=font_header, fill='black', anchor="mm")
-    draw.text((rank_width + 20, 20), "Team & Manager", font=font_header, fill='black')
-    draw.text((width - tot_width - gw_width - 20, 20), "GW", font=font_header, fill='black')
-    draw.text((width - tot_width + 20, 20), "TOT", font=font_header, fill='black')
+    # Define column widths and positions
+    rank_center = rank_width // 2
+    team_start = rank_width + 20
+    gw_center = width - tot_width - gw_width // 2
+    tot_center = width - tot_width // 2
     
-    # Draw header underline
-    draw.line([(0, 65), (width, 65)], fill='black', width=2)
+    # Adjust header vertical position
+    header_y = 40  # Moved down from 20
+    
+    # Draw headers
+    draw.text((rank_center, header_y), "Rank", font=font_header, fill='black', anchor="mm")
+    draw.text((team_start, header_y), "Team & Manager", font=font_header, fill='black', anchor="lm")
+    draw.text((gw_center, header_y), "GW", font=font_header, fill='black', anchor="mm")
+    draw.text((tot_center, header_y), "TOT", font=font_header, fill='black', anchor="mm")
+    
+    # Draw header underline (moved closer to headers)
+    draw.line([(0, header_y + 25), (width, header_y + 25)], fill='black', width=2)
     
     def draw_slightly_bold_text(x, y, text, font, fill='black'):
         # Draw the text twice with a slight offset for a slightly bolder effect
         draw.text((x, y), text, font=font, fill=fill, anchor="lm")
         draw.text((x+1, y), text, font=font, fill=fill, anchor="lm")
     
+    # Adjust the starting y-coordinate for the standings
+    standings_start_y = header_y + 35
+    
     # Draw standings
     for i, entry in enumerate(standings):
-        y = 70 + i * 60
+        y = standings_start_y + i * 60
         row_center = y + 30
         
         # Calculate positions for rank and indicator
@@ -389,7 +420,7 @@ def create_leaderboard_image(standings):
             draw.polygon([(indicator_x, indicator_y + 6), (indicator_x + 10, indicator_y - 6), (indicator_x + 20, indicator_y + 6)], fill='red')
         else:
             draw.rectangle([(indicator_x, indicator_y - 4), (indicator_x + 20, indicator_y + 4)], fill='grey')
-                                
+        
         # Draw team name (slightly bold) and manager name (regular)
         draw_slightly_bold_text(rank_width + 20, row_center - 12, entry['entry_name'], font_bold)
         draw.text((rank_width + 20, row_center + 12), entry['player_name'], font=font_regular, fill='black', anchor="lm")
@@ -406,6 +437,7 @@ def create_leaderboard_image(standings):
     img_byte_arr.seek(0)
     return img_byte_arr
 
+# Command to get league standings as a leaderboard image
 @bot.command()
 async def leaderboard(ctx):
     try:
@@ -427,6 +459,7 @@ async def leaderboard(ctx):
         print(f"An error occurred: {str(e)}")
         await ctx.send("An error occurred while fetching the leaderboard.")
 
+# Command to set league ID
 @bot.command()
 async def set_league(ctx, league_id: int):
     try:
@@ -438,6 +471,7 @@ async def set_league(ctx, league_id: int):
         print(f"An error occurred: {str(e)}")
         await ctx.send("An error occurred while setting the league ID.")
 
+# Command to get league ID
 @bot.command()
 async def get_league(ctx):
     try:
