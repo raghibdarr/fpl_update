@@ -416,7 +416,7 @@ def create_leaderboard_image(standings):
     draw.text((team_start, header_y), "Team & Manager", font=font_header, fill='black', anchor="lm")
     draw.text((gw_center, header_y), "GW", font=font_header, fill='black', anchor="mm")
     draw.text((tot_center, header_y), "TOT", font=font_header, fill='black', anchor="mm")
-    draw.text((value_center, header_y), "Value", font=font_header, fill='black', anchor="mm")
+    draw.text((value_center, header_y), "Value (£)", font=font_header, fill='black', anchor="mm")
     draw.text((or_center, header_y), "OR", font=font_header, fill='black', anchor="mm")
     
     # Draw header underline (moved closer to headers)
@@ -464,12 +464,17 @@ def create_leaderboard_image(standings):
         
         # Draw Team Value
         team_value = entry.get('value', 0) / 10  # Assuming value is in tenths of millions
-        draw.text((value_center, row_center), f"£{team_value:.1f}m", font=font_regular, fill='black', anchor="mm")
+        draw.text((value_center, row_center), f"{team_value:.1f}m", font=font_regular, fill='black', anchor="mm")
         
         # Draw Overall Rank
         overall_rank = entry.get('overall_rank', 'N/A')
         if isinstance(overall_rank, int):
-            overall_rank_text = f"{overall_rank:,}"
+            if overall_rank >= 1000000:
+                overall_rank_text = f"{overall_rank/1000000:.1f}M"
+            elif overall_rank >= 1000:
+                overall_rank_text = f"{overall_rank/1000:.1f}K"
+            else:
+                overall_rank_text = f"{overall_rank}"
         else:
             overall_rank_text = str(overall_rank)
         draw.text((or_center, row_center), overall_rank_text, font=font_regular, fill='black', anchor="mm")
