@@ -336,33 +336,51 @@ async def fetch_league_standings(league_id):
     return data['standings']['results']
 
 def create_leaderboard_image(standings):
-    width, height = 800, 100 + len(standings) * 30
+    width, height = 800, 50 + len(standings) * 40
     image = Image.new('RGB', (width, height), color='white')
     draw = ImageDraw.Draw(image)
     
-    # Use default font (usually Arial or a similar sans-serif font)
+    # Use default font
     font = ImageFont.load_default()
     
+    # Define column widths
+    rank_width = 60
+    team_width = 400
+    gw_width = 60
+    tot_width = 60
+    
     # Draw headers
-    draw.text((10, 10), "Rank", font=font, fill='black')
-    draw.text((100, 10), "Team & Manager", font=font, fill='black')
-    draw.text((500, 10), "GW", font=font, fill='black')
-    draw.text((600, 10), "TOT", font=font, fill='black')
+    draw.text((10, 15), "Rank", font=font, fill='black')
+    draw.text((rank_width + 10, 15), "Team & Manager", font=font, fill='black')
+    draw.text((width - tot_width - gw_width - 10, 15), "GW", font=font, fill='black')
+    draw.text((width - tot_width + 10, 15), "TOT", font=font, fill='black')
+    
+    # Draw header underline
+    draw.line([(0, 40), (width, 40)], fill='black', width=1)
     
     # Draw standings
     for i, entry in enumerate(standings):
-        y = 50 + i * 30
-        draw.text((10, y), str(entry['rank']), font=font, fill='black')
-        draw.text((100, y), entry['entry_name'], font=font, fill='black')
-        draw.text((100, y+20), entry['player_name'], font=font, fill='black')
-        draw.text((500, y), str(entry['event_total']), font=font, fill='black')
-        draw.text((600, y), str(entry['total']), font=font, fill='black')
+        y = 50 + i * 40
+        
+        # Draw rank
+        draw.text((10, y + 5), str(entry['rank']), font=font, fill='black')
         
         # Draw arrow
         if entry['rank'] < entry['last_rank']:
-            draw.polygon([(50, y+5), (60, y+15), (70, y+5)], fill='green')  # Up arrow
+            draw.polygon([(40, y + 5), (50, y + 15), (60, y + 5)], fill='green')  # Up arrow
         elif entry['rank'] > entry['last_rank']:
-            draw.polygon([(50, y+15), (60, y+5), (70, y+15)], fill='red')  # Down arrow
+            draw.polygon([(40, y + 15), (50, y + 5), (60, y + 15)], fill='red')  # Down arrow
+        
+        # Draw team name and manager name
+        draw.text((rank_width + 10, y), entry['entry_name'], font=font, fill='black')
+        draw.text((rank_width + 10, y + 20), entry['player_name'], font=font, fill='black')
+        
+        # Draw GW and TOT scores
+        draw.text((width - tot_width - gw_width + 10, y + 10), str(entry['event_total']), font=font, fill='black')
+        draw.text((width - tot_width + 20, y + 10), str(entry['total']), font=font, fill='black')
+        
+        # Draw row separator
+        draw.line([(0, y + 39), (width, y + 39)], fill='lightgray', width=1)
     
     img_byte_arr = io.BytesIO()
     image.save(img_byte_arr, format='PNG')
