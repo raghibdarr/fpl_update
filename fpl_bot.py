@@ -9,6 +9,7 @@ from discord import Embed, Color
 import os
 from dotenv import load_dotenv
 from collections import defaultdict
+import aiosqlite
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -51,10 +52,22 @@ async def fetch_fpl_data(endpoint):
         async with session.get(f"{FPL_API_BASE}{endpoint}") as response:
             return await response.json()
 
+async def setup_database():
+    async with aiosqlite.connect('fpl_users.db') as db:
+        await db.execute('''\
+            CREATE TABLE IF NOT EXISTS users (
+                discord_id INTEGER PRIMARY KEY,
+                fpl_id INTEGER,
+                team_name TEXT
+            )
+        ''')
+        await db.commit()
+
 @bot.event
 async def on_ready():
     print(f'{bot.user} has connected to Discord!')
     print(f'Bot is in {len(bot.guilds)} guilds')
+    await setup_database()
 
 @bot.command()
 async def hello(ctx):
@@ -238,6 +251,59 @@ async def fixtures(ctx, *, team_name=None):
     except Exception as e:
         print(f"An error occurred: {str(e)}")
         await ctx.send(f"An error occurred while fetching fixtures. Please try again later.")
+
+@bot.command()
+async def link(ctx, fpl_id: int):
+    try:
+        # Fetch user data from FPL API
+        user_data = await fetch_fpl_data(f"entry/{fpl_id}/")
+        team_name = user_data['name']
+
+        async with aiosqlite.connect('fpl_users.db') as db:
+            await db.execute('''
+                INSERT OR REPLACE INTO users (discord_id, fpl_id, team_name)
+                VALUES (?, ?, ?)
+            ''', (ctx.author.id, fpl_id, team_name))
+            await db.commit()
+
+        await ctx.send(f"Successfully linked your Discord account to FPL team: {team_name}")
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        await ctx.send("An error occurred while linking your account. Please check your FPL ID and try again.")
+
+@bot.command()
+async def myteam(ctx):
+    try:
+        async with aiosqlite.connect('fpl_users.db') as db:
+            async with db.execute('SELECT fpl_id, team_name FROM users WHERE discord_id = ?', (ctx.author.id,)) as cursor:
+                result = await cursor.fetchone()
+
+        if result:
+            fpl_id, team_name = result
+            await ctx.send(f"Your linked FPL team is: {team_name} (ID: {fpl_id})")
+        else:
+            await ctx.send("You haven't linked an FPL team yet. Use the !link command to link your team.")
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        await ctx.send("An error occurred while fetching your team information.")
+
+@bot.command()
+async def mypoints(ctx):
+    try:
+        async with aiosqlite.connect('fpl_users.db') as db:
+            async with db.execute('SELECT fpl_id FROM users WHERE discord_id = ?', (ctx.author.id,)) as cursor:
+                result = await cursor.fetchone()
+
+        if result:
+            fpl_id = result[0]
+            user_data = await fetch_fpl_data(f"entry/{fpl_id}/")
+            total_points = user_data['summary_overall_points']
+            await ctx.send(f"Your total FPL points: {total_points}")
+        else:
+            await ctx.send("You haven't linked an FPL team yet. Use the !link command to link your team.")
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        await ctx.send("An error occurred while fetching your points.")
 
 print("Registering commands...")
 print(f"Registered commands: {[command.name for command in bot.commands]}")
