@@ -355,9 +355,9 @@ def create_leaderboard_image(standings):
     
     for font_path in font_paths:
         try:
-            font_regular = ImageFont.truetype(font_path, 20)  # Increased size
-            font_bold = ImageFont.truetype(font_path, 20, index=1)  # Bold version
-            font_header = ImageFont.truetype(font_path, 20)  # Larger size for header
+            font_regular = ImageFont.truetype(font_path, 20)  # Keep this size
+            font_bold = ImageFont.truetype(font_path, 24)  # Increase size for team names
+            font_header = ImageFont.truetype(font_path, 28)  # Increase size for headers
             print(f"Successfully loaded font: {font_path}")
             break
         except IOError:
@@ -366,8 +366,8 @@ def create_leaderboard_image(standings):
     if font_regular is None:
         print("Failed to load any system font. Using default font.")
         font_regular = ImageFont.load_default().font_variant(size=20)
-        font_bold = font_regular  # Use regular as bold if no bold version available
-        font_header = ImageFont.load_default().font_variant(size=20)
+        font_bold = ImageFont.load_default().font_variant(size=24)
+        font_header = ImageFont.load_default().font_variant(size=28)
     
     # Define column widths
     rank_width = 80
@@ -376,10 +376,10 @@ def create_leaderboard_image(standings):
     tot_width = 80
     
     # Draw headers
-    draw.text((20, 20), "Rank", font=font_header, fill='black')
-    draw.text((rank_width + 20, 20), "Team & Manager", font=font_header, fill='black')
-    draw.text((width - tot_width - gw_width - 20, 20), "GW", font=font_header, fill='black')
-    draw.text((width - tot_width + 20, 20), "TOT", font=font_header, fill='black')
+    draw.text((20, 15), "Rank", font=font_header, fill='black')
+    draw.text((rank_width + 20, 15), "Team & Manager", font=font_header, fill='black')
+    draw.text((width - tot_width - gw_width - 20, 15), "GW", font=font_header, fill='black')
+    draw.text((width - tot_width + 20, 15), "TOT", font=font_header, fill='black')
     
     # Draw header underline
     draw.line([(0, 55), (width, 55)], fill='black', width=2)
@@ -399,9 +399,9 @@ def create_leaderboard_image(standings):
         elif entry['rank'] > entry['last_rank']:
             draw.polygon([(60, arrow_y + 7), (75, arrow_y - 7), (90, arrow_y + 7)], fill='red')  # Down arrow
         
-        # Draw team name (bold) and manager name (regular)
-        draw.text((rank_width + 20, row_center - 10), entry['entry_name'], font=font_bold, fill='black', anchor="lm")
-        draw.text((rank_width + 20, row_center + 10), entry['player_name'], font=font_regular, fill='black', anchor="lm")
+        # Draw team name (bold and larger) and manager name (regular)
+        draw.text((rank_width + 20, row_center - 12), entry['entry_name'], font=font_bold, fill='black', anchor="lm")
+        draw.text((rank_width + 20, row_center + 12), entry['player_name'], font=font_regular, fill='black', anchor="lm")
         
         # Draw GW and TOT scores
         draw.text((width - tot_width - gw_width + 20, row_center), str(entry['event_total']), font=font_regular, fill='black', anchor="mm")
