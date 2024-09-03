@@ -163,7 +163,7 @@ async def fixtures(ctx, *, team_name=None):
                 unix_timestamp = int(kickoff_time.timestamp())
                 
                 # Create Discord timestamp
-                discord_timestamp = f"<t:{unix_timestamp}:f>"
+                discord_timestamp = f"<t:{unix_timestamp}:R> (<t:{unix_timestamp}:f>)"
                 
                 fixture_text = f"GW{gw} - {discord_timestamp} - {'(H)' if is_home else '(A)'} vs {opponent} - FDR: {fdr}"
                 
