@@ -336,53 +336,56 @@ async def fetch_league_standings(league_id):
     return data['standings']['results']
 
 def create_leaderboard_image(standings):
-    width, height = 800, 50 + len(standings) * 40
+    width, height = 1000, 60 + len(standings) * 50  # Increased width and height
     image = Image.new('RGB', (width, height), color='white')
     draw = ImageDraw.Draw(image)
     
-    # Use default font
-    font = ImageFont.load_default()
+    # Load fonts
+    font_path = os.path.join('fonts', 'arial.ttf')  # Make sure you have arial.ttf in a 'fonts' folder
+    font_regular = ImageFont.truetype(font_path, 16)
+    font_bold = ImageFont.truetype(font_path, 16, index=1)  # index=1 usually indicates bold
+    font_header = ImageFont.truetype(font_path, 18, index=1)
     
     # Define column widths
-    rank_width = 60
-    team_width = 400
-    gw_width = 60
-    tot_width = 60
+    rank_width = 80
+    team_width = 500
+    gw_width = 80
+    tot_width = 80
     
     # Draw headers
-    draw.text((10, 15), "Rank", font=font, fill='black')
-    draw.text((rank_width + 10, 15), "Team & Manager", font=font, fill='black')
-    draw.text((width - tot_width - gw_width - 10, 15), "GW", font=font, fill='black')
-    draw.text((width - tot_width + 10, 15), "TOT", font=font, fill='black')
+    draw.text((10, 20), "Rank", font=font_header, fill='black')
+    draw.text((rank_width + 10, 20), "Team & Manager", font=font_header, fill='black')
+    draw.text((width - tot_width - gw_width - 10, 20), "GW", font=font_header, fill='black')
+    draw.text((width - tot_width + 10, 20), "TOT", font=font_header, fill='black')
     
     # Draw header underline
-    draw.line([(0, 40), (width, 40)], fill='black', width=1)
+    draw.line([(0, 50), (width, 50)], fill='black', width=1)
     
     # Draw standings
     for i, entry in enumerate(standings):
-        y = 50 + i * 40
-        row_center = y + 20  # Center of the row
+        y = 60 + i * 50
+        row_center = y + 25  # Center of the row
         
         # Draw rank
-        draw.text((10, row_center - 6), str(entry['rank']), font=font, fill='black', anchor="lm")
+        draw.text((10, row_center), str(entry['rank']), font=font_regular, fill='black', anchor="lm")
         
         # Draw arrow
         arrow_y = row_center
         if entry['rank'] < entry['last_rank']:
-            draw.polygon([(40, arrow_y + 5), (50, arrow_y - 5), (60, arrow_y + 5)], fill='green')  # Up arrow
+            draw.polygon([(50, arrow_y - 6), (62, arrow_y + 6), (74, arrow_y - 6)], fill='green')  # Up arrow
         elif entry['rank'] > entry['last_rank']:
-            draw.polygon([(40, arrow_y - 5), (50, arrow_y + 5), (60, arrow_y - 5)], fill='red')  # Down arrow
+            draw.polygon([(50, arrow_y + 6), (62, arrow_y - 6), (74, arrow_y + 6)], fill='red')  # Down arrow
         
-        # Draw team name and manager name with reduced spacing
-        draw.text((rank_width + 10, row_center - 7), entry['entry_name'], font=font, fill='black', anchor="lm")
-        draw.text((rank_width + 10, row_center + 7), entry['player_name'], font=font, fill='black', anchor="lm")
+        # Draw team name (bold) and manager name
+        draw.text((rank_width + 10, row_center - 10), entry['entry_name'], font=font_bold, fill='black', anchor="lm")
+        draw.text((rank_width + 10, row_center + 10), entry['player_name'], font=font_regular, fill='black', anchor="lm")
         
         # Draw GW and TOT scores
-        draw.text((width - tot_width - gw_width + 10, row_center), str(entry['event_total']), font=font, fill='black', anchor="mm")
-        draw.text((width - tot_width + 20, row_center), str(entry['total']), font=font, fill='black', anchor="mm")
+        draw.text((width - tot_width - gw_width + 10, row_center), str(entry['event_total']), font=font_regular, fill='black', anchor="mm")
+        draw.text((width - tot_width + 20, row_center), str(entry['total']), font=font_regular, fill='black', anchor="mm")
         
         # Draw row separator
-        draw.line([(0, y + 39), (width, y + 39)], fill='lightgray', width=1)
+        draw.line([(0, y + 49), (width, y + 49)], fill='lightgray', width=1)
     
     img_byte_arr = io.BytesIO()
     image.save(img_byte_arr, format='PNG')
