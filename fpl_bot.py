@@ -355,9 +355,9 @@ def create_leaderboard_image(standings):
     
     for font_path in font_paths:
         try:
-            font_regular = ImageFont.truetype(font_path, 16)
-            font_bold = ImageFont.truetype(font_path, 16)
-            font_header = ImageFont.truetype(font_path, 18)
+            font_regular = ImageFont.truetype(font_path, 20)  # Increased size
+            font_bold = ImageFont.truetype(font_path, 20, index=1)  # Bold version
+            font_header = ImageFont.truetype(font_path, 20)  # Larger size for header
             print(f"Successfully loaded font: {font_path}")
             break
         except IOError:
@@ -365,9 +365,9 @@ def create_leaderboard_image(standings):
     
     if font_regular is None:
         print("Failed to load any system font. Using default font.")
-        font_regular = ImageFont.load_default()
-        font_bold = ImageFont.load_default()
-        font_header = ImageFont.load_default()
+        font_regular = ImageFont.load_default().font_variant(size=20)
+        font_bold = font_regular  # Use regular as bold if no bold version available
+        font_header = ImageFont.load_default().font_variant(size=20)
     
     # Define column widths
     rank_width = 80
@@ -376,13 +376,13 @@ def create_leaderboard_image(standings):
     tot_width = 80
     
     # Draw headers
-    draw.text((10, 20), "Rank", font=font_header, fill='black')
-    draw.text((rank_width + 10, 20), "Team & Manager", font=font_header, fill='black')
-    draw.text((width - tot_width - gw_width - 10, 20), "GW", font=font_header, fill='black')
-    draw.text((width - tot_width + 10, 20), "TOT", font=font_header, fill='black')
+    draw.text((20, 20), "Rank", font=font_header, fill='black')
+    draw.text((rank_width + 20, 20), "Team & Manager", font=font_header, fill='black')
+    draw.text((width - tot_width - gw_width - 20, 20), "GW", font=font_header, fill='black')
+    draw.text((width - tot_width + 20, 20), "TOT", font=font_header, fill='black')
     
     # Draw header underline
-    draw.line([(0, 50), (width, 50)], fill='black', width=1)
+    draw.line([(0, 55), (width, 55)], fill='black', width=2)
     
     # Draw standings
     for i, entry in enumerate(standings):
@@ -390,22 +390,22 @@ def create_leaderboard_image(standings):
         row_center = y + 25  # Center of the row
         
         # Draw rank
-        draw.text((10, row_center), str(entry['rank']), font=font_regular, fill='black', anchor="lm")
+        draw.text((20, row_center), str(entry['rank']), font=font_regular, fill='black', anchor="lm")
         
         # Draw arrow
         arrow_y = row_center
         if entry['rank'] < entry['last_rank']:
-            draw.polygon([(50, arrow_y - 6), (62, arrow_y + 6), (74, arrow_y - 6)], fill='green')  # Up arrow
+            draw.polygon([(60, arrow_y - 7), (75, arrow_y + 7), (90, arrow_y - 7)], fill='green')  # Up arrow
         elif entry['rank'] > entry['last_rank']:
-            draw.polygon([(50, arrow_y + 6), (62, arrow_y - 6), (74, arrow_y + 6)], fill='red')  # Down arrow
+            draw.polygon([(60, arrow_y + 7), (75, arrow_y - 7), (90, arrow_y + 7)], fill='red')  # Down arrow
         
-        # Draw team name and manager name
-        draw.text((rank_width + 10, row_center - 10), entry['entry_name'], font=font_bold, fill='black', anchor="lm")
-        draw.text((rank_width + 10, row_center + 10), entry['player_name'], font=font_regular, fill='black', anchor="lm")
+        # Draw team name (bold) and manager name (regular)
+        draw.text((rank_width + 20, row_center - 10), entry['entry_name'], font=font_bold, fill='black', anchor="lm")
+        draw.text((rank_width + 20, row_center + 10), entry['player_name'], font=font_regular, fill='black', anchor="lm")
         
         # Draw GW and TOT scores
-        draw.text((width - tot_width - gw_width + 10, row_center), str(entry['event_total']), font=font_regular, fill='black', anchor="mm")
-        draw.text((width - tot_width + 20, row_center), str(entry['total']), font=font_regular, fill='black', anchor="mm")
+        draw.text((width - tot_width - gw_width + 20, row_center), str(entry['event_total']), font=font_regular, fill='black', anchor="mm")
+        draw.text((width - tot_width + 30, row_center), str(entry['total']), font=font_regular, fill='black', anchor="mm")
         
         # Draw row separator
         draw.line([(0, y + 49), (width, y + 49)], fill='lightgray', width=1)
