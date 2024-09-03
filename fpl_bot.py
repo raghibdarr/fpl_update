@@ -340,11 +340,34 @@ def create_leaderboard_image(standings):
     image = Image.new('RGB', (width, height), color='white')
     draw = ImageDraw.Draw(image)
     
-    # Load fonts
-    font_path = os.path.join('fonts', 'arial.ttf')  # Make sure you have arial.ttf in a 'fonts' folder
-    font_regular = ImageFont.truetype(font_path, 16)
-    font_bold = ImageFont.truetype(font_path, 16, index=1)  # index=1 usually indicates bold
-    font_header = ImageFont.truetype(font_path, 18, index=1)
+    # Try to load a system font
+    font_paths = [
+        'Arial.ttf',
+        'arial.ttf',
+        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',  # Linux
+        '/System/Library/Fonts/Helvetica.ttc',  # macOS
+        'C:\\Windows\\Fonts\\arial.ttf'  # Windows
+    ]
+    
+    font_regular = None
+    font_bold = None
+    font_header = None
+    
+    for font_path in font_paths:
+        try:
+            font_regular = ImageFont.truetype(font_path, 16)
+            font_bold = ImageFont.truetype(font_path, 16)
+            font_header = ImageFont.truetype(font_path, 18)
+            print(f"Successfully loaded font: {font_path}")
+            break
+        except IOError:
+            continue
+    
+    if font_regular is None:
+        print("Failed to load any system font. Using default font.")
+        font_regular = ImageFont.load_default()
+        font_bold = ImageFont.load_default()
+        font_header = ImageFont.load_default()
     
     # Define column widths
     rank_width = 80
@@ -376,7 +399,7 @@ def create_leaderboard_image(standings):
         elif entry['rank'] > entry['last_rank']:
             draw.polygon([(50, arrow_y + 6), (62, arrow_y - 6), (74, arrow_y + 6)], fill='red')  # Down arrow
         
-        # Draw team name (bold) and manager name
+        # Draw team name and manager name
         draw.text((rank_width + 10, row_center - 10), entry['entry_name'], font=font_bold, fill='black', anchor="lm")
         draw.text((rank_width + 10, row_center + 10), entry['player_name'], font=font_regular, fill='black', anchor="lm")
         
@@ -403,6 +426,9 @@ async def leaderboard(ctx):
             league_id = result[0]
             standings = await fetch_league_standings(league_id)
             image = create_leaderboard_image(standings)
+            if image is None:
+                await ctx.send("An error occurred while creating the leaderboard image. Check the console for details.")
+                return
             await ctx.send(file=discord.File(fp=image, filename='leaderboard.png'))
         else:
             await ctx.send("No league has been set. Use !set_league command to set a league ID.")
