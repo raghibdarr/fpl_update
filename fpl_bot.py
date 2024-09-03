@@ -361,23 +361,25 @@ def create_leaderboard_image(standings):
     # Draw standings
     for i, entry in enumerate(standings):
         y = 50 + i * 40
+        row_center = y + 20  # Center of the row
         
         # Draw rank
-        draw.text((10, y + 5), str(entry['rank']), font=font, fill='black')
+        draw.text((10, row_center - 6), str(entry['rank']), font=font, fill='black', anchor="lm")
         
         # Draw arrow
+        arrow_y = row_center
         if entry['rank'] < entry['last_rank']:
-            draw.polygon([(40, y + 15), (50, y + 5), (60, y + 15)], fill='green')  # Up arrow
+            draw.polygon([(40, arrow_y - 5), (50, arrow_y + 5), (60, arrow_y - 5)], fill='green')  # Up arrow
         elif entry['rank'] > entry['last_rank']:
-            draw.polygon([(40, y + 5), (50, y + 15), (60, y + 5)], fill='red')  # Down arrow
+            draw.polygon([(40, arrow_y + 5), (50, arrow_y - 5), (60, arrow_y + 5)], fill='red')  # Down arrow
         
         # Draw team name and manager name
-        draw.text((rank_width + 10, y), entry['entry_name'], font=font, fill='black')
-        draw.text((rank_width + 10, y + 20), entry['player_name'], font=font, fill='black')
+        draw.text((rank_width + 10, row_center - 10), entry['entry_name'], font=font, fill='black', anchor="lm")
+        draw.text((rank_width + 10, row_center + 10), entry['player_name'], font=font, fill='black', anchor="lm")
         
         # Draw GW and TOT scores
-        draw.text((width - tot_width - gw_width + 10, y + 10), str(entry['event_total']), font=font, fill='black')
-        draw.text((width - tot_width + 20, y + 10), str(entry['total']), font=font, fill='black')
+        draw.text((width - tot_width - gw_width + 10, row_center), str(entry['event_total']), font=font, fill='black', anchor="mm")
+        draw.text((width - tot_width + 20, row_center), str(entry['total']), font=font, fill='black', anchor="mm")
         
         # Draw row separator
         draw.line([(0, y + 39), (width, y + 39)], fill='lightgray', width=1)
