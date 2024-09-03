@@ -336,58 +336,39 @@ async def fetch_league_standings(league_id):
     return data['standings']['results']
 
 def create_leaderboard_image(standings):
-    width, height = 1000, 60 + len(standings) * 50  # Increased width and height
+    width, height = 1100, 70 + len(standings) * 60  # Increased dimensions
     image = Image.new('RGB', (width, height), color='white')
     draw = ImageDraw.Draw(image)
     
-    # Try to load a system font
-    font_paths = [
-        'Arial.ttf',
-        'arial.ttf',
-        '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',  # Linux
-        '/System/Library/Fonts/Helvetica.ttc',  # macOS
-        'C:\\Windows\\Fonts\\arial.ttf'  # Windows
-    ]
-    
-    font_regular = None
-    font_bold = None
-    font_header = None
-    
-    for font_path in font_paths:
-        try:
-            font_regular = ImageFont.truetype(font_path, 20)  # Keep this size
-            font_bold = ImageFont.truetype(font_path, 24)  # Increase size for team names
-            font_header = ImageFont.truetype(font_path, 28)  # Increase size for headers
-            print(f"Successfully loaded font: {font_path}")
-            break
-        except IOError:
-            continue
-    
-    if font_regular is None:
-        print("Failed to load any system font. Using default font.")
-        font_regular = ImageFont.load_default().font_variant(size=20)
-        font_bold = ImageFont.load_default().font_variant(size=24)
-        font_header = ImageFont.load_default().font_variant(size=28)
+    # Use default font with increased sizes
+    font_regular = ImageFont.load_default().font_variant(size=24)  # Increased size
+    font_bold = ImageFont.load_default().font_variant(size=24)  # Same size as regular
+    font_header = ImageFont.load_default().font_variant(size=28)  # Kept the same
     
     # Define column widths
-    rank_width = 80
-    team_width = 500
-    gw_width = 80
-    tot_width = 80
+    rank_width = 90
+    team_width = 550
+    gw_width = 90
+    tot_width = 90
     
     # Draw headers
-    draw.text((20, 15), "Rank", font=font_header, fill='black')
-    draw.text((rank_width + 20, 15), "Team & Manager", font=font_header, fill='black')
-    draw.text((width - tot_width - gw_width - 20, 15), "GW", font=font_header, fill='black')
-    draw.text((width - tot_width + 20, 15), "TOT", font=font_header, fill='black')
+    draw.text((20, 20), "Rank", font=font_header, fill='black')
+    draw.text((rank_width + 20, 20), "Team & Manager", font=font_header, fill='black')
+    draw.text((width - tot_width - gw_width - 20, 20), "GW", font=font_header, fill='black')
+    draw.text((width - tot_width + 20, 20), "TOT", font=font_header, fill='black')
     
     # Draw header underline
-    draw.line([(0, 55), (width, 55)], fill='black', width=2)
+    draw.line([(0, 65), (width, 65)], fill='black', width=2)
+    
+    def draw_slightly_bold_text(x, y, text, font, fill='black'):
+        # Draw the text twice with a slight offset for a slightly bolder effect
+        draw.text((x, y), text, font=font, fill=fill, anchor="lm")
+        draw.text((x+1, y), text, font=font, fill=fill, anchor="lm")
     
     # Draw standings
     for i, entry in enumerate(standings):
-        y = 60 + i * 50
-        row_center = y + 25  # Center of the row
+        y = 70 + i * 60
+        row_center = y + 30  # Center of the row
         
         # Draw rank
         draw.text((20, row_center), str(entry['rank']), font=font_regular, fill='black', anchor="lm")
@@ -395,12 +376,12 @@ def create_leaderboard_image(standings):
         # Draw arrow
         arrow_y = row_center
         if entry['rank'] < entry['last_rank']:
-            draw.polygon([(60, arrow_y - 7), (75, arrow_y + 7), (90, arrow_y - 7)], fill='green')  # Up arrow
+            draw.polygon([(70, arrow_y - 8), (85, arrow_y + 8), (100, arrow_y - 8)], fill='green')  # Up arrow
         elif entry['rank'] > entry['last_rank']:
-            draw.polygon([(60, arrow_y + 7), (75, arrow_y - 7), (90, arrow_y + 7)], fill='red')  # Down arrow
+            draw.polygon([(70, arrow_y + 8), (85, arrow_y - 8), (100, arrow_y + 8)], fill='red')  # Down arrow
         
-        # Draw team name (bold and larger) and manager name (regular)
-        draw.text((rank_width + 20, row_center - 12), entry['entry_name'], font=font_bold, fill='black', anchor="lm")
+        # Draw team name (slightly bold) and manager name (regular)
+        draw_slightly_bold_text(rank_width + 20, row_center - 12, entry['entry_name'], font_bold)
         draw.text((rank_width + 20, row_center + 12), entry['player_name'], font=font_regular, fill='black', anchor="lm")
         
         # Draw GW and TOT scores
@@ -408,7 +389,7 @@ def create_leaderboard_image(standings):
         draw.text((width - tot_width + 30, row_center), str(entry['total']), font=font_regular, fill='black', anchor="mm")
         
         # Draw row separator
-        draw.line([(0, y + 49), (width, y + 49)], fill='lightgray', width=1)
+        draw.line([(0, y + 59), (width, y + 59)], fill='lightgray', width=1)
     
     img_byte_arr = io.BytesIO()
     image.save(img_byte_arr, format='PNG')
