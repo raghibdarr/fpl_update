@@ -10,6 +10,8 @@ import os
 from dotenv import load_dotenv
 from collections import defaultdict
 import aiosqlite
+from PIL import Image, ImageDraw, ImageFont
+import io
 
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
@@ -52,13 +54,22 @@ async def fetch_fpl_data(endpoint):
         async with session.get(f"{FPL_API_BASE}{endpoint}") as response:
             return await response.json()
 
+# Database setup
 async def setup_database():
     async with aiosqlite.connect('fpl_users.db') as db:
-        await db.execute('''\
+        # Create users table
+        await db.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 discord_id INTEGER PRIMARY KEY,
                 fpl_id INTEGER,
                 team_name TEXT
+            )
+        ''')
+        # Create leagues table
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS leagues (
+                guild_id INTEGER PRIMARY KEY,
+                league_id INTEGER
             )
         ''')
         await db.commit()
@@ -314,6 +325,92 @@ async def mypoints(ctx):
     except Exception as e:
         print(f"An error occurred: {str(e)}")
         await ctx.send("An error occurred while fetching your points.")
+
+async def fetch_league_standings(league_id):
+    url = f"https://fantasy.premierleague.com/api/leagues-classic/{league_id}/standings/"
+    async with aiohttp.ClientSession() as session:
+        async with session.get(url) as resp:
+            if resp.status != 200:
+                raise Exception(f"API request failed with status {resp.status}")
+            data = await resp.json()
+    return data['standings']['results']
+
+def create_leaderboard_image(standings):
+    width, height = 800, 100 + len(standings) * 30
+    image = Image.new('RGB', (width, height), color='white')
+    draw = ImageDraw.Draw(image)
+    
+    # Use default font (usually Arial or a similar sans-serif font)
+    font = ImageFont.load_default()
+    
+    # Draw headers
+    draw.text((10, 10), "Rank", font=font, fill='black')
+    draw.text((100, 10), "Team & Manager", font=font, fill='black')
+    draw.text((500, 10), "GW", font=font, fill='black')
+    draw.text((600, 10), "TOT", font=font, fill='black')
+    
+    # Draw standings
+    for i, entry in enumerate(standings):
+        y = 50 + i * 30
+        draw.text((10, y), str(entry['rank']), font=font, fill='black')
+        draw.text((100, y), entry['entry_name'], font=font, fill='black')
+        draw.text((100, y+20), entry['player_name'], font=font, fill='black')
+        draw.text((500, y), str(entry['event_total']), font=font, fill='black')
+        draw.text((600, y), str(entry['total']), font=font, fill='black')
+        
+        # Draw arrow
+        if entry['rank'] < entry['last_rank']:
+            draw.polygon([(50, y+5), (60, y+15), (70, y+5)], fill='green')  # Up arrow
+        elif entry['rank'] > entry['last_rank']:
+            draw.polygon([(50, y+15), (60, y+5), (70, y+15)], fill='red')  # Down arrow
+    
+    img_byte_arr = io.BytesIO()
+    image.save(img_byte_arr, format='PNG')
+    img_byte_arr.seek(0)
+    return img_byte_arr
+
+@bot.command()
+async def leaderboard(ctx):
+    try:
+        async with aiosqlite.connect('fpl_users.db') as db:
+            async with db.execute('SELECT league_id FROM leagues WHERE guild_id = ?', (ctx.guild.id,)) as cursor:
+                result = await cursor.fetchone()
+        
+        if result:
+            league_id = result[0]
+            standings = await fetch_league_standings(league_id)
+            image = create_leaderboard_image(standings)
+            await ctx.send(file=discord.File(fp=image, filename='leaderboard.png'))
+        else:
+            await ctx.send("No league has been set. Use !set_league command to set a league ID.")
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        await ctx.send("An error occurred while fetching the leaderboard.")
+
+@bot.command()
+async def set_league(ctx, league_id: int):
+    try:
+        async with aiosqlite.connect('fpl_users.db') as db:
+            await db.execute('INSERT OR REPLACE INTO leagues (guild_id, league_id) VALUES (?, ?)', (ctx.guild.id, league_id))
+            await db.commit()
+        await ctx.send(f"League ID set to {league_id}")
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        await ctx.send("An error occurred while setting the league ID.")
+
+@bot.command()
+async def get_league(ctx):
+    try:
+        async with aiosqlite.connect('fpl_users.db') as db:
+            async with db.execute('SELECT league_id FROM leagues WHERE guild_id = ?', (ctx.guild.id,)) as cursor:
+                result = await cursor.fetchone()
+        if result:
+            await ctx.send(f"The current league ID is {result[0]}")
+        else:
+            await ctx.send("No league ID has been set. Use !set_league to set one.")
+    except Exception as e:
+        print(f"An error occurred: {str(e)}")
+        await ctx.send("An error occurred while fetching the league ID.")
 
 print("Registering commands...")
 print(f"Registered commands: {[command.name for command in bot.commands]}")
