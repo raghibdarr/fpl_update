@@ -416,7 +416,7 @@ def create_leaderboard_image(standings):
     draw.text((team_start, header_y), "Team & Manager", font=font_header, fill='black', anchor="lm")
     draw.text((gw_center, header_y), "GW", font=font_header, fill='black', anchor="mm")
     draw.text((tot_center, header_y), "TOT", font=font_header, fill='black', anchor="mm")
-    draw.text((value_center, header_y), "Value (£)", font=font_header, fill='black', anchor="mm")
+    draw.text((value_center, header_y), "Value", font=font_header, fill='black', anchor="mm")
     draw.text((or_center, header_y), "OR", font=font_header, fill='black', anchor="mm")
     
     # Draw header underline (moved closer to headers)
@@ -448,9 +448,9 @@ def create_leaderboard_image(standings):
         indicator_x = start_x + rank_text_width + 5
         indicator_y = row_center
         if entry['rank'] < entry['last_rank']:
-            draw.polygon([(indicator_x, indicator_y - 6), (indicator_x + 10, indicator_y + 6), (indicator_x + 20, indicator_y - 6)], fill='green')
+            draw.polygon([(indicator_x, indicator_y + 6), (indicator_x + 10, indicator_y - 6), (indicator_x + 20, indicator_y + 6)], fill='green')
         elif entry['rank'] > entry['last_rank']:
-            draw.polygon([(indicator_x, indicator_y + 6), (indicator_x + 10, indicator_y - 6), (indicator_x + 20, indicator_y + 6)], fill='red')
+            draw.polygon([(indicator_x, indicator_y - 6), (indicator_x + 10, indicator_y + 6), (indicator_x + 20, indicator_y - 6)], fill='red')
         else:
             draw.rectangle([(indicator_x, indicator_y - 4), (indicator_x + 20, indicator_y + 4)], fill='grey')
         
