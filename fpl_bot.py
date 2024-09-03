@@ -125,8 +125,8 @@ async def fixtures(ctx, *, team_name=None):
         current_gw = next(gw for gw in teams_data['events'] if gw['is_current'])['id']
 
         def get_fdr_color(fdr):
-            colors = {1: Color.dark_red(), 2: Color.red(), 3: Color.light_grey(), 
-                      4: Color.green(), 5: Color.dark_green()}
+            colors = {1: Color.dark_green(), 2: Color.green(), 3: Color.light_grey(), 
+                      4: Color.red(), 5: Color.dark_red()}
             return colors.get(fdr, Color.light_grey())
 
         embeds = []
