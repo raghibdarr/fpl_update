@@ -352,7 +352,24 @@ async def fetch_league_standings(league_id):
             if resp.status != 200:
                 raise Exception(f"API request failed with status {resp.status}")
             data = await resp.json()
-    return data['standings']['results']
+    
+    standings = data['standings']['results']
+    
+    # Fetch additional data for each team
+    for entry in standings:
+        team_id = entry['entry']
+        team_url = f"https://fantasy.premierleague.com/api/entry/{team_id}/"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(team_url) as resp:
+                if resp.status == 200:
+                    team_data = await resp.json()
+                    entry['value'] = team_data.get('value', 0)
+                    entry['overall_rank'] = team_data.get('overall_rank', 'N/A')
+                else:
+                    entry['value'] = 0
+                    entry['overall_rank'] = 'N/A'
+    
+    return standings
 
 # Function to create leaderboard image
 def create_leaderboard_image(standings):
@@ -427,19 +444,24 @@ def create_leaderboard_image(standings):
             draw.rectangle([(indicator_x, indicator_y - 4), (indicator_x + 20, indicator_y + 4)], fill='grey')
         
         # Draw team name (slightly bold) and manager name (regular)
-        draw_slightly_bold_text(team_start, row_center - 12, entry['entry_name'], font_bold)
-        draw.text((team_start, row_center + 12), entry['player_name'], font=font_regular, fill='black', anchor="lm")
+        draw_slightly_bold_text(team_start, row_center - 12, entry.get('entry_name', 'Unknown'), font_bold)
+        draw.text((team_start, row_center + 12), entry.get('player_name', 'Unknown'), font=font_regular, fill='black', anchor="lm")
         
         # Draw GW and TOT scores
-        draw.text((gw_center, row_center), str(entry['event_total']), font=font_regular, fill='black', anchor="mm")
-        draw.text((tot_center, row_center), str(entry['total']), font=font_regular, fill='black', anchor="mm")
+        draw.text((gw_center, row_center), str(entry.get('event_total', 'N/A')), font=font_regular, fill='black', anchor="mm")
+        draw.text((tot_center, row_center), str(entry.get('total', 'N/A')), font=font_regular, fill='black', anchor="mm")
         
         # Draw Team Value
-        team_value = entry['value'] / 10  # Assuming value is in tenths of millions
+        team_value = entry.get('value', 0) / 10  # Assuming value is in tenths of millions
         draw.text((value_center, row_center), f"£{team_value:.1f}m", font=font_regular, fill='black', anchor="mm")
         
         # Draw Overall Rank
-        draw.text((or_center, row_center), f"{entry['overall_rank']:,}", font=font_regular, fill='black', anchor="mm")
+        overall_rank = entry.get('overall_rank', 'N/A')
+        if isinstance(overall_rank, int):
+            overall_rank_text = f"{overall_rank:,}"
+        else:
+            overall_rank_text = str(overall_rank)
+        draw.text((or_center, row_center), overall_rank_text, font=font_regular, fill='black', anchor="mm")
         
         # Draw row separator
         draw.line([(0, y + 59), (width, y + 59)], fill='lightgray', width=1)
@@ -460,6 +482,7 @@ async def leaderboard(ctx):
         if result:
             league_id = result[0]
             standings = await fetch_league_standings(league_id)
+            print(f"Fetched standings: {standings[:2]}")  # Print first two entries for debugging
             image = create_leaderboard_image(standings)
             if image is None:
                 await ctx.send("An error occurred while creating the leaderboard image. Check the console for details.")
@@ -468,8 +491,8 @@ async def leaderboard(ctx):
         else:
             await ctx.send("No league has been set. Use !set_league command to set a league ID.")
     except Exception as e:
-        print(f"An error occurred: {str(e)}")
-        await ctx.send("An error occurred while fetching the leaderboard.")
+        print(f"An error occurred in leaderboard command: {str(e)}")
+        await ctx.send(f"An error occurred while fetching the leaderboard: {str(e)}")
 
 # Command to set league ID
 @bot.command()
