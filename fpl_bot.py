@@ -356,7 +356,7 @@ async def fetch_league_standings(league_id):
 
 # Function to create leaderboard image
 def create_leaderboard_image(standings):
-    width, height = 1100, 70 + len(standings) * 60
+    width, height = 1300, 70 + len(standings) * 60
     image = Image.new('RGB', (width, height), color='white')
     draw = ImageDraw.Draw(image)
     
@@ -366,15 +366,19 @@ def create_leaderboard_image(standings):
     
     # Define column widths
     rank_width = 90
-    team_width = 550
+    team_width = 450
     gw_width = 90
     tot_width = 90
+    value_width = 100
+    or_width = 100
     
     # Define column widths and positions
     rank_center = rank_width // 2
     team_start = rank_width + 20
-    gw_center = width - tot_width - gw_width // 2
-    tot_center = width - tot_width // 2
+    gw_center = width - or_width - value_width - tot_width - gw_width // 2
+    tot_center = width - or_width - value_width - tot_width // 2
+    value_center = width - or_width - value_width // 2
+    or_center = width - or_width // 2
     
     # Adjust header vertical position
     header_y = 40  # Moved down from 20
@@ -384,6 +388,8 @@ def create_leaderboard_image(standings):
     draw.text((team_start, header_y), "Team & Manager", font=font_header, fill='black', anchor="lm")
     draw.text((gw_center, header_y), "GW", font=font_header, fill='black', anchor="mm")
     draw.text((tot_center, header_y), "TOT", font=font_header, fill='black', anchor="mm")
+    draw.text((value_center, header_y), "Value", font=font_header, fill='black', anchor="mm")
+    draw.text((or_center, header_y), "OR", font=font_header, fill='black', anchor="mm")
     
     # Draw header underline (moved closer to headers)
     draw.line([(0, header_y + 25), (width, header_y + 25)], fill='black', width=2)
@@ -402,7 +408,6 @@ def create_leaderboard_image(standings):
         row_center = y + 30
         
         # Calculate positions for rank and indicator
-        rank_center = rank_width // 2
         rank_text_width = draw.textlength(str(entry['rank']), font=font_regular)
         indicator_width = 20
         total_width = rank_text_width + indicator_width + 5  # 5 px spacing
@@ -415,19 +420,26 @@ def create_leaderboard_image(standings):
         indicator_x = start_x + rank_text_width + 5
         indicator_y = row_center
         if entry['rank'] < entry['last_rank']:
-            draw.polygon([(indicator_x, indicator_y + 6), (indicator_x + 10, indicator_y - 6), (indicator_x + 20, indicator_y + 6)], fill='green')
+            draw.polygon([(indicator_x, indicator_y - 6), (indicator_x + 10, indicator_y + 6), (indicator_x + 20, indicator_y - 6)], fill='green')
         elif entry['rank'] > entry['last_rank']:
-            draw.polygon([(indicator_x, indicator_y - 6), (indicator_x + 10, indicator_y + 6), (indicator_x + 20, indicator_y - 6)], fill='red')
+            draw.polygon([(indicator_x, indicator_y + 6), (indicator_x + 10, indicator_y - 6), (indicator_x + 20, indicator_y + 6)], fill='red')
         else:
             draw.rectangle([(indicator_x, indicator_y - 4), (indicator_x + 20, indicator_y + 4)], fill='grey')
         
         # Draw team name (slightly bold) and manager name (regular)
-        draw_slightly_bold_text(rank_width + 20, row_center - 12, entry['entry_name'], font_bold)
-        draw.text((rank_width + 20, row_center + 12), entry['player_name'], font=font_regular, fill='black', anchor="lm")
+        draw_slightly_bold_text(team_start, row_center - 12, entry['entry_name'], font_bold)
+        draw.text((team_start, row_center + 12), entry['player_name'], font=font_regular, fill='black', anchor="lm")
         
         # Draw GW and TOT scores
-        draw.text((width - tot_width - gw_width + 20, row_center), str(entry['event_total']), font=font_regular, fill='black', anchor="mm")
-        draw.text((width - tot_width + 30, row_center), str(entry['total']), font=font_regular, fill='black', anchor="mm")
+        draw.text((gw_center, row_center), str(entry['event_total']), font=font_regular, fill='black', anchor="mm")
+        draw.text((tot_center, row_center), str(entry['total']), font=font_regular, fill='black', anchor="mm")
+        
+        # Draw Team Value
+        team_value = entry['value'] / 10  # Assuming value is in tenths of millions
+        draw.text((value_center, row_center), f"£{team_value:.1f}m", font=font_regular, fill='black', anchor="mm")
+        
+        # Draw Overall Rank
+        draw.text((or_center, row_center), f"{entry['overall_rank']:,}", font=font_regular, fill='black', anchor="mm")
         
         # Draw row separator
         draw.line([(0, y + 59), (width, y + 59)], fill='lightgray', width=1)
