@@ -158,8 +158,8 @@ async def fixtures(ctx, *, team_name=None):
                 fdr = fixture['team_h_difficulty' if is_home else 'team_a_difficulty']
                 gw = fixture['event']
                 kickoff_time = datetime.strptime(fixture['kickoff_time'], "%Y-%m-%dT%H:%M:%SZ")
-                formatted_time = kickoff_time.strftime("%d %b %Y %H:%M")
-                fixture_text = f"GW{gw} - {formatted_time}\n{'(H)' if is_home else '(A)'} vs {opponent}\nFDR: {fdr}"
+                formatted_time = kickoff_time.strftime("%d %b %H:%M")
+                fixture_text = f"GW{gw} - {formatted_time} - {'(H)' if is_home else '(A)'} vs {opponent} - FDR: {fdr}"
                 
                 embed = Embed(description=fixture_text, color=get_fdr_color(fdr))
                 embeds.append(embed)
