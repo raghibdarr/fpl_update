@@ -352,7 +352,7 @@ def create_leaderboard_image(standings):
     tot_width = 90
     
     # Draw headers
-    draw.text((20, 20), "Rank", font=font_header, fill='black')
+    draw.text((rank_width // 2, 20), "Rank", font=font_header, fill='black', anchor="mm")
     draw.text((rank_width + 20, 20), "Team & Manager", font=font_header, fill='black')
     draw.text((width - tot_width - gw_width - 20, 20), "GW", font=font_header, fill='black')
     draw.text((width - tot_width + 20, 20), "TOT", font=font_header, fill='black')
@@ -368,21 +368,28 @@ def create_leaderboard_image(standings):
     # Draw standings
     for i, entry in enumerate(standings):
         y = 70 + i * 60
-        row_center = y + 30  # Center of the row
+        row_center = y + 30
+        
+        # Calculate positions for rank and indicator
+        rank_center = rank_width // 2
+        rank_text_width = draw.textlength(str(entry['rank']), font=font_regular)
+        indicator_width = 20
+        total_width = rank_text_width + indicator_width + 5  # 5 px spacing
+        start_x = rank_center - total_width // 2
         
         # Draw rank
-        draw.text((20, row_center), str(entry['rank']), font=font_regular, fill='black', anchor="lm")
+        draw.text((start_x, row_center), str(entry['rank']), font=font_regular, fill='black', anchor="lm")
         
         # Draw arrow or indicator
-        arrow_y = row_center
+        indicator_x = start_x + rank_text_width + 5
+        indicator_y = row_center
         if entry['rank'] < entry['last_rank']:
-            draw.polygon([(70, arrow_y - 8), (85, arrow_y + 8), (100, arrow_y - 8)], fill='green')  # Up arrow
+            draw.polygon([(indicator_x, indicator_y - 6), (indicator_x + 10, indicator_y + 6), (indicator_x + 20, indicator_y - 6)], fill='green')
         elif entry['rank'] > entry['last_rank']:
-            draw.polygon([(70, arrow_y + 8), (85, arrow_y - 8), (100, arrow_y + 8)], fill='red')  # Down arrow
+            draw.polygon([(indicator_x, indicator_y + 6), (indicator_x + 10, indicator_y - 6), (indicator_x + 20, indicator_y + 6)], fill='red')
         else:
-            # Draw grey indicator for unchanged rank
-            draw.rectangle([(70, arrow_y - 6), (100, arrow_y + 6)], fill='grey')
-        
+            draw.rectangle([(indicator_x, indicator_y - 4), (indicator_x + 20, indicator_y + 4)], fill='grey')
+                                
         # Draw team name (slightly bold) and manager name (regular)
         draw_slightly_bold_text(rank_width + 20, row_center - 12, entry['entry_name'], font_bold)
         draw.text((rank_width + 20, row_center + 12), entry['player_name'], font=font_regular, fill='black', anchor="lm")
