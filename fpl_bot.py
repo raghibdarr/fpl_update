@@ -214,7 +214,7 @@ async def fixtures(ctx, *, team_name=None):
             fixtures_by_day = defaultdict(list)
             for fixture in upcoming_fixtures:
                 kickoff_time = datetime.strptime(fixture['kickoff_time'], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-                day_key = kickoff_time.strftime("%A")  # Get day name
+                day_key = kickoff_time.strftime("%A, %d %B %Y")  # Get day name and date
                 fixtures_by_day[day_key].append(fixture)
             
             embed = discord.Embed(title=f"Upcoming Fixtures - Gameweek {current_gw + 1}", color=discord.Color.blue())
@@ -226,9 +226,7 @@ async def fixtures(ctx, *, team_name=None):
                     away_team = team_map[fixture['team_a']]['name']
                     kickoff_time = datetime.strptime(fixture['kickoff_time'], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
                     unix_timestamp = int(kickoff_time.timestamp())
-                    time_diff = kickoff_time - datetime.now(timezone.utc)
-                    days_until = time_diff.days + 1  # +1 because we want to show "in 1 day" on the day before
-                    fixture_str = f"{home_team} vs {away_team} - in {days_until} day{'s' if days_until != 1 else ''}, <t:{unix_timestamp}:t> <t:{unix_timestamp}:D>"
+                    fixture_str = f"{home_team} vs {away_team} - <t:{unix_timestamp}:R>, <t:{unix_timestamp}:t>"
                     fixture_strings.append(fixture_str)
                 
                 # Join all fixtures for this day into a single string
