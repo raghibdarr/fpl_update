@@ -176,7 +176,6 @@ async def fixtures(ctx, *, team_name=None):
                 if datetime.strptime(fixture['kickoff_time'], '%Y-%m-%dT%H:%M:%SZ').replace(tzinfo=timezone.utc) > current_time
             ]
 
-            # Use upcoming_fixtures instead of fixtures_data
             team_fixtures = [f for f in upcoming_fixtures if f['team_h'] == team_id or f['team_a'] == team_id]
             team_fixtures.sort(key=lambda x: x['event'])
 
@@ -206,6 +205,7 @@ async def fixtures(ctx, *, team_name=None):
             for fixture in team_fixtures[:5]:
                 print(f"Fixture: {fixture}")
 
+            await ctx.send(embeds=embeds)
         else:
             upcoming_fixtures = [f for f in fixtures_data if f['event'] == current_gw + 1]
             upcoming_fixtures.sort(key=lambda x: x['kickoff_time'])
@@ -226,7 +226,7 @@ async def fixtures(ctx, *, team_name=None):
                     away_team = team_map[fixture['team_a']]['name']
                     kickoff_time = datetime.strptime(fixture['kickoff_time'], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
                     unix_timestamp = int(kickoff_time.timestamp())
-                    fixture_str = f"{home_team} vs {away_team} - <t:{unix_timestamp}:R>, <t:{unix_timestamp}:t>"
+                    fixture_str = f"• {home_team} vs {away_team} - <t:{unix_timestamp}:R>, <t:{unix_timestamp}:t>"
                     fixture_strings.append(fixture_str)
                 
                 # Join all fixtures for this day into a single string
@@ -234,11 +234,6 @@ async def fixtures(ctx, *, team_name=None):
                 embed.add_field(name=f"**{day}**", value=day_fixtures, inline=False)
             
             await ctx.send(embed=embed)
-
-        if embeds:
-            await ctx.send(embeds=embeds)
-        else:
-            await ctx.send("No fixtures found.")
 
     except Exception as e:
         print(f"An error occurred: {str(e)}")
