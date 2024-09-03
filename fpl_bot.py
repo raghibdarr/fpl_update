@@ -141,24 +141,13 @@ async def player(ctx, *, player_name):
 # Command to get fixtures
 @bot.command()
 async def fixtures(ctx, *, team_name=None):
-    print("Teams in the data:")
     try:
         fixtures_data = await fetch_fpl_data("fixtures/")
         teams_data = await fetch_fpl_data("bootstrap-static/")
-
-        for team in teams_data['teams']:
-            print(f"{team['name']}: {team['id']}")
-
+        
         team_map = {team['id']: team for team in teams_data['teams']}
         current_gw = next(gw for gw in teams_data['events'] if gw['is_current'])['id']
-
-        def get_fdr_color(fdr):
-            colors = {1: Color.dark_green(), 2: Color.green(), 3: Color.light_grey(), 
-                      4: Color.red(), 5: Color.dark_red()}
-            return colors.get(fdr, Color.light_grey())
-
-        embeds = []
-
+        
         if team_name:
             team_name_lower = team_name.lower()
             matched_team = None
@@ -191,7 +180,7 @@ async def fixtures(ctx, *, team_name=None):
             team_fixtures.sort(key=lambda x: x['event'])
 
             title_embed = Embed(title=f"Upcoming fixtures for {matched_team.title()}", color=Color.blue())
-            embeds.append(title_embed)
+            embeds = [title_embed]
 
             for fixture in team_fixtures[:5]:
                 is_home = fixture['team_h'] == team_id
@@ -217,24 +206,19 @@ async def fixtures(ctx, *, team_name=None):
                 print(f"Fixture: {fixture}")
 
         else:
-            next_gw = current_gw + 1
-            next_gw_fixtures = [f for f in fixtures_data if f['event'] == next_gw]
-            next_gw_fixtures.sort(key=lambda x: x['kickoff_time'])
-
-            title_embed = Embed(title=f"Fixtures for Gameweek {next_gw}", color=Color.blue())
-            embeds.append(title_embed)
-
-            for fixture in next_gw_fixtures:
+            upcoming_fixtures = [f for f in fixtures_data if f['event'] == current_gw + 1]
+            upcoming_fixtures.sort(key=lambda x: x['kickoff_time'])
+            
+            embed = discord.Embed(title=f"Upcoming Fixtures - Gameweek {current_gw + 1}", color=discord.Color.blue())
+            
+            for fixture in upcoming_fixtures[:10]:  # Limit to 10 fixtures to avoid hitting embed limit
                 home_team = team_map[fixture['team_h']]['name']
                 away_team = team_map[fixture['team_a']]['name']
-                home_fdr = fixture['team_h_difficulty']
-                away_fdr = fixture['team_a_difficulty']
                 kickoff_time = datetime.strptime(fixture['kickoff_time'], "%Y-%m-%dT%H:%M:%SZ")
-                formatted_time = kickoff_time.strftime("%d %b %Y %H:%M")
-                fixture_text = f"{formatted_time}\n{home_team} vs {away_team}\nHome FDR: {home_fdr} | Away FDR: {away_fdr}"
-                
-                embed = Embed(description=fixture_text, color=get_fdr_color(min(home_fdr, away_fdr)))
-                embeds.append(embed)
+                fixture_str = f"{home_team} vs {away_team} - <t:{int(kickoff_time.timestamp())}:R>"
+                embed.add_field(name="\u200b", value=fixture_str, inline=False)
+            
+            await ctx.send(embed=embed)
 
         if embeds:
             await ctx.send(embeds=embeds)
