@@ -189,14 +189,14 @@ async def fixtures(ctx, num_gameweeks: int = 6):
     
     await ctx.send("Generating fixture grid... This may take a moment.")
     
-    fixture_data, start_gw, actual_gameweeks, team_names = await fetch_fixture_data(num_gameweeks)
-    image = create_fixture_grid(fixture_data, actual_gameweeks, start_gw, team_names)
+    fixture_data, start_gw, actual_gameweeks, team_names, gw_dates = await fetch_fixture_data(num_gameweeks)
+    image = create_fixture_grid(fixture_data, actual_gameweeks, start_gw, team_names, gw_dates)
     
     img_byte_arr = io.BytesIO()
     image.save(img_byte_arr, format='PNG')
     img_byte_arr.seek(0)
     
-    await ctx.send(file=discord.File(fp=img_byte_arr, filename='fixtures.png'))
+    await ctx.send(file=discord.File(fp=img_byte_arr, filename='fixtures.png'))   
 
 # Function to fetch fixture data
 async def fetch_fixture_data(num_gameweeks):
@@ -236,10 +236,16 @@ async def fetch_fixture_data(num_gameweeks):
             fixture_data[home_team][gw_index] = {'opponent': away_team.upper(), 'fdr': fixture['team_h_difficulty']}
             fixture_data[away_team][gw_index] = {'opponent': home_team.lower(), 'fdr': fixture['team_a_difficulty']}
 
-    return fixture_data, start_gw, actual_gameweeks, {v['short']: v['name'] for v in teams.values()}
+    # Get the dates for each gameweek
+    gw_dates = {}
+    for event in bootstrap['events']:
+        if start_gw <= event['id'] < start_gw + actual_gameweeks:
+            gw_dates[event['id']] = datetime.strptime(event['deadline_time'], "%Y-%m-%dT%H:%M:%SZ").strftime("%d/%m")
+
+    return fixture_data, start_gw, actual_gameweeks, {v['short']: v['name'] for v in teams.values()}, gw_dates
     
 # Function to create fixture grid
-def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names):
+def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names, gw_dates):
     # Calculate the actual number of gameweeks to display
     actual_gameweeks = min(num_gameweeks, 38 - start_gw + 1)
     
@@ -256,13 +262,15 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names):
     font = ImageFont.truetype("arial.ttf", 16)
     bold_font = ImageFont.truetype("arialbd.ttf", 16)
     header_font = ImageFont.truetype("arialbd.ttf", 18)
+    date_font = ImageFont.truetype("arial.ttf", 14)  # New font for dates
     
-    # Draw headers
+    # Draw headers and dates
     for i in range(actual_gameweeks):
         gw_number = start_gw + i
         x = padding + team_column_width + spacing + i*cell_width
-        draw.text((x + cell_width/2, padding + 25), f"GW{gw_number}", font=header_font, fill='black', anchor="mm")
-    
+        draw.text((x + cell_width/2, padding + 10), gw_dates.get(gw_number, ""), font=date_font, fill='black', anchor="mm")
+        draw.text((x + cell_width/2, padding + 35), f"GW{gw_number}", font=header_font, fill='black', anchor="mm")
+        
     # Draw team names and fixtures
     for i, (team_short, fixtures) in enumerate(fixture_data.items()):
         y = padding + 50 + i*cell_height
