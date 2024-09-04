@@ -194,6 +194,8 @@ async def fixtures(ctx, *, args=""):
     
     teams = [team.strip() for team in teams if team.strip()]  # Remove empty strings
     num_gameweeks = min(num_gameweeks, 38)  # Cap at 38 gameweeks
+
+    print(f"Teams after parsing: {teams}")
     
     await ctx.send("Generating fixture grid... This may take a moment.")
     
@@ -250,16 +252,24 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=[]):
             fixture_data[home_team][gw_index] = {'opponent': away_team.upper(), 'fdr': fixture['team_h_difficulty']}
             fixture_data[away_team][gw_index] = {'opponent': home_team.lower(), 'fdr': fixture['team_a_difficulty']}
 
+    print(f"Selected teams: {selected_teams}")
+    print(f"Number of teams before filtering: {len(fixture_data)}")
+
     # Filter teams if selected_teams is not empty
     if selected_teams:
         filtered_fixture_data = {}
         for team, fixtures in fixture_data.items():
+            print(f"Checking team: {team}")
             team_full_name = next((name for name, aliases in team_aliases.items() if team in aliases), None)
+            print(f"Full name for {team}: {team_full_name}")
             if team_full_name:
                 if any(any(alias.lower() in selected_team.lower() for alias in team_aliases[team_full_name]) 
                        for selected_team in selected_teams):
+                    print(f"Match found for {team}")
                     filtered_fixture_data[team] = fixtures
         fixture_data = filtered_fixture_data
+
+    print(f"Number of teams after filtering: {len(fixture_data)}")
 
     # Get the dates for each gameweek
     gw_dates = {}
