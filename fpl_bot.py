@@ -187,15 +187,15 @@ async def fixtures(ctx, num_gameweeks: int = 6):
     
     await ctx.send("Generating fixture grid... This may take a moment.")
     
-    fixture_data = await fetch_fixture_data(num_gameweeks)
-    image = create_fixture_grid(fixture_data, num_gameweeks)
+    fixture_data, current_gw = await fetch_fixture_data(num_gameweeks)
+    image = create_fixture_grid(fixture_data, num_gameweeks, current_gw)
     
     img_byte_arr = io.BytesIO()
     image.save(img_byte_arr, format='PNG')
     img_byte_arr.seek(0)
     
     await ctx.send(file=discord.File(fp=img_byte_arr, filename='fixtures.png'))
-
+    
 # Function to fetch fixture data
 async def fetch_fixture_data(num_gameweeks):
     async with aiohttp.ClientSession() as session:
@@ -217,10 +217,10 @@ async def fetch_fixture_data(num_gameweeks):
             fixture_data[home_team][gw_index] = away_team.upper()
             fixture_data[away_team][gw_index] = home_team.lower()
 
-    return fixture_data
+    return fixture_data, current_gw
 
 # Function to create fixture grid
-def create_fixture_grid(fixture_data, num_gameweeks):
+def create_fixture_grid(fixture_data, num_gameweeks, current_gw):
     width, height = 100 + (100 * num_gameweeks), 50 + (30 * len(fixture_data))
     image = Image.new('RGB', (width, height), color='white')
     draw = ImageDraw.Draw(image)
