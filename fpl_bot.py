@@ -568,39 +568,40 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names, gw_da
     points_column_width = 40
     spacing = 10
     padding = 20
-    header_height = 50
+    header_height_small = 25  # Height for Pos, Club, Pts headers
+    header_height_large = 50  # Height for GW headers
     gap_height = 10  # Gap between headers and data
     
     width = padding * 2 + position_column_width + team_column_width + points_column_width + spacing + (cell_width * num_gameweeks)
-    height = padding * 2 + header_height + gap_height + (cell_height * len(fixture_data))
+    height = padding * 2 + header_height_large + gap_height + (cell_height * len(fixture_data))
     image = Image.new('RGB', (width, height), color='white')
     draw = ImageDraw.Draw(image)
     
     font = ImageFont.truetype("arial.ttf", 16)
     bold_font = ImageFont.truetype("arialbd.ttf", 16)
-    header_font = ImageFont.truetype("arialbd.ttf", 18)
+    header_font = ImageFont.truetype("arialbd.ttf", 16)
     date_font = ImageFont.truetype("arial.ttf", 14)
     
     # Draw headers for position, club, and points columns
-    draw.rectangle([padding, padding, padding + position_column_width, padding + header_height], outline='black')
-    draw.text((padding + position_column_width/2, padding + header_height/2), "Pos", font=bold_font, fill='black', anchor="mm")
+    draw.rectangle([padding, padding + header_height_large - header_height_small, padding + position_column_width, padding + header_height_large], outline='black')
+    draw.text((padding + position_column_width/2, padding + header_height_large - 5), "Pos", font=header_font, fill='black', anchor="mb")
     
-    draw.rectangle([padding + position_column_width, padding, padding + position_column_width + team_column_width, padding + header_height], outline='black')
-    draw.text((padding + position_column_width + team_column_width/2, padding + header_height/2), "Club", font=bold_font, fill='black', anchor="mm")
+    draw.rectangle([padding + position_column_width, padding + header_height_large - header_height_small, padding + position_column_width + team_column_width, padding + header_height_large], outline='black')
+    draw.text((padding + position_column_width + 5, padding + header_height_large - 5), "Club", font=header_font, fill='black', anchor="lb")
     
-    draw.rectangle([padding + position_column_width + team_column_width, padding, padding + position_column_width + team_column_width + points_column_width, padding + header_height], outline='black')
-    draw.text((padding + position_column_width + team_column_width + points_column_width/2, padding + header_height/2), "Pts", font=bold_font, fill='black', anchor="mm")
+    draw.rectangle([padding + position_column_width + team_column_width, padding + header_height_large - header_height_small, padding + position_column_width + team_column_width + points_column_width, padding + header_height_large], outline='black')
+    draw.text((padding + position_column_width + team_column_width + points_column_width/2, padding + header_height_large - 5), "Pts", font=header_font, fill='black', anchor="mb")
     
     # Draw headers and dates for gameweeks
     for i in range(num_gameweeks):
         x = padding + position_column_width + team_column_width + points_column_width + spacing + i*cell_width
-        draw.rectangle([x, padding, x + cell_width, padding + header_height], outline='black')
-        draw.text((x + cell_width/2, padding + 15), gw_dates.get(start_gw + i, ""), font=date_font, fill='black', anchor="mm")
-        draw.text((x + cell_width/2, padding + 35), f"GW{start_gw + i}", font=header_font, fill='black', anchor="mm")
+        draw.rectangle([x, padding, x + cell_width, padding + header_height_large], outline='black')
+        draw.text((x + cell_width/2, padding + 10), gw_dates.get(start_gw + i, ""), font=date_font, fill='black', anchor="mt")
+        draw.text((x + cell_width/2, padding + header_height_large - 10), f"GW{start_gw + i}", font=header_font, fill='black', anchor="mb")
     
     # Draw team names, positions, points, and fixtures
     for i, (team_short, fixtures) in enumerate(fixture_data.items()):
-        y = padding + header_height + gap_height + i*cell_height
+        y = padding + header_height_large + gap_height + i*cell_height
         team_full = team_names[team_short]
         
         # Draw position (in bold)
@@ -629,17 +630,17 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names, gw_da
     # Draw gridlines for fixture columns only
     for i in range(num_gameweeks + 1):
         x = padding + position_column_width + team_column_width + points_column_width + spacing + i*cell_width
-        draw.line([(x, padding + header_height + gap_height), (x, height - padding)], fill='black', width=1)
+        draw.line([(x, padding + header_height_large + gap_height), (x, height - padding)], fill='black', width=1)
     
     # Draw horizontal gridlines for team rows only, starting below the first team
     for i in range(1, len(fixture_data) + 1):
-        y = padding + header_height + gap_height + i*cell_height
+        y = padding + header_height_large + gap_height + i*cell_height
         draw.line([(padding, y), (padding + position_column_width + team_column_width + points_column_width, y)], fill='black', width=1)
         draw.line([(padding + position_column_width + team_column_width + points_column_width + spacing, y), (width - padding, y)], fill='black', width=1)
     
     # Draw vertical lines for position and points columns, but not connecting to the header boxes
-    draw.line([(padding + position_column_width, padding + header_height + gap_height), (padding + position_column_width, height - padding)], fill='black', width=1)
-    draw.line([(padding + position_column_width + team_column_width, padding + header_height + gap_height), (padding + position_column_width + team_column_width, height - padding)], fill='black', width=1)
+    draw.line([(padding + position_column_width, padding + header_height_large + gap_height), (padding + position_column_width, height - padding)], fill='black', width=1)
+    draw.line([(padding + position_column_width + team_column_width, padding + header_height_large + gap_height), (padding + position_column_width + team_column_width, height - padding)], fill='black', width=1)
     
     return image
 
