@@ -330,8 +330,11 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
             bootstrap = await resp.json()
 
     teams = {team['id']: {'short': team['short_name'], 'name': team['name'], 'position': team['position']} for team in bootstrap['teams']}
+    
+    print("Teams data:")
+    for team_id, team_info in teams.items():
+        print(f"{team_info['short']}: Position {team_info['position']}")
 
-    # Find the current gameweek and check if it has finished
     current_time = datetime.now(timezone.utc)
     current_gw = next((event for event in bootstrap['events'] if event['is_current']), None)
     
@@ -363,19 +366,33 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
     if selected_teams:
         filtered_fixture_data = {}
         for team_short, fixtures in fixture_data.items():
-            team_full_name = next((name for name, aliases in team_aliases.items() if team_short.lower() in [alias.lower() for alias in aliases]), None)
-            if team_full_name and any(selected_team.lower() in [alias.lower() for alias in team_aliases[team_full_name]] for selected_team in selected_teams):
-                filtered_fixture_data[team_short] = fixtures
+            team_full_name = next((name for name, aliases in team_aliases.items() if team_short in aliases), None)
+            if team_full_name:
+                if any(any(alias.lower() in selected_team.lower() for alias in team_aliases[team_full_name]) 
+                       for selected_team in selected_teams):
+                    filtered_fixture_data[team_short] = fixtures
         fixture_data = filtered_fixture_data
+
+    # Create a mapping of short names to positions
+    short_to_position = {team['short']: team['position'] for team in teams.values()}
+
+    print(f"Sort method: {sort_method}")
+    print("Short to position mapping:")
+    for short, position in short_to_position.items():
+        print(f"{short}: {position}")
 
     # Sort teams based on the specified method
     if sort_method == "fdr":
         avg_fdr = {team: sum(f['fdr'] for f in fixtures if f['fdr'] != 0) / sum(1 for f in fixtures if f['fdr'] != 0) for team, fixtures in fixture_data.items()}
         sorted_teams = sorted(fixture_data.keys(), key=lambda x: avg_fdr[x])
     elif sort_method == "table":
-        sorted_teams = sorted(fixture_data.keys(), key=lambda x: next(team['position'] for team in teams.values() if team['short'] == x))
+        sorted_teams = sorted(fixture_data.keys(), key=lambda x: short_to_position[x])
     else:  # alphabetical
         sorted_teams = sorted(fixture_data.keys())
+
+    print("Sorted teams order:")
+    for team in sorted_teams:
+        print(f"{team}: Position {short_to_position[team]}")
 
     # Reorder fixture_data based on the sorting
     fixture_data = {team: fixture_data[team] for team in sorted_teams}
