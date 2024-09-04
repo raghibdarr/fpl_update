@@ -206,9 +206,12 @@ async def fixtures(ctx, *, args=""):
     num_gameweeks = min(num_gameweeks, 38)  # Cap at 38 gameweeks
 
     print(f"Teams after parsing: {teams}")
+    print("Team aliases:")
+    for team, aliases in team_aliases.items():
+        print(f"{team}: {aliases}")
     
     await ctx.send("Generating fixture grid... This may take a moment.")
-    
+        
     try:
         fixture_data, start_gw, actual_gameweeks, team_names, gw_dates = await fetch_fixture_data(num_gameweeks, teams)
         if not fixture_data:
@@ -234,6 +237,10 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=[]):
 
     teams = {team['id']: {'short': team['short_name'], 'name': team['name']} for team in bootstrap['teams']}
     
+    print("Team aliases:")
+    for team, aliases in team_aliases.items():
+        print(f"{team}: {aliases}")
+
     # Find the current gameweek and check if it has finished
     current_time = datetime.now(timezone.utc)
     current_gw = next((event for event in bootstrap['events'] if event['is_current']), None)
@@ -268,15 +275,15 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=[]):
     # Filter teams if selected_teams is not empty
     if selected_teams:
         filtered_fixture_data = {}
-        for team, fixtures in fixture_data.items():
-            print(f"Checking team: {team}")
-            team_full_name = next((name for name, aliases in team_aliases.items() if team in aliases), None)
-            print(f"Full name for {team}: {team_full_name}")
+        for team_short, fixtures in fixture_data.items():
+            print(f"Checking team: {team_short}")
+            team_full_name = next((name for name, aliases in team_aliases.items() if team_short in aliases), None)
+            print(f"Full name for {team_short}: {team_full_name}")
             if team_full_name:
-                if any(any(alias.lower() in selected_team.lower() for alias in team_aliases[team_full_name]) 
+                if any(selected_team.lower() in [alias.lower() for alias in team_aliases[team_full_name]] 
                        for selected_team in selected_teams):
-                    print(f"Match found for {team}")
-                    filtered_fixture_data[team] = fixtures
+                    print(f"Match found for {team_short}")
+                    filtered_fixture_data[team_short] = fixtures
         fixture_data = filtered_fixture_data
 
     print(f"Number of teams after filtering: {len(fixture_data)}")
