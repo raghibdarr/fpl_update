@@ -185,10 +185,13 @@ async def fixtures(ctx, *, args=""):
     params = args.split()
     num_gameweeks = 6  # Default
     teams = []
+    sort_method = "alphabetical"  # Default sorting method
     
     for param in params:
         if param.isdigit():
             num_gameweeks = min(int(param), 38)
+        elif param.lower() in ["fdr", "alphabetical"]:
+            sort_method = param.lower()
         else:
             teams.extend(param.strip().rstrip(',').lower().split(','))
     
@@ -206,14 +209,12 @@ async def fixtures(ctx, *, args=""):
     num_gameweeks = min(num_gameweeks, 38)  # Cap at 38 gameweeks
 
     print(f"Teams after parsing: {teams}")
-    print("Team aliases:")
-    for team, aliases in team_aliases.items():
-        print(f"{team}: {aliases}")
+    print(f"Sort method: {sort_method}")
     
     await ctx.send("Generating fixture grid... This may take a moment.")
-        
+    
     try:
-        fixture_data, start_gw, actual_gameweeks, team_names, gw_dates = await fetch_fixture_data(num_gameweeks, teams)
+        fixture_data, start_gw, actual_gameweeks, team_names, gw_dates = await fetch_fixture_data(num_gameweeks, teams, sort_method)
         if not fixture_data:
             await ctx.send("No valid teams found. Please check your team names and try again.")
             return
@@ -296,6 +297,22 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=[]):
     for event in bootstrap['events']:
         if start_gw <= event['id'] < start_gw + actual_gameweeks:
             gw_dates[event['id']] = datetime.strptime(event['deadline_time'], "%Y-%m-%dT%H:%M:%SZ").strftime("%d/%m")
+
+    # Calculate average FDR for each team
+    avg_fdr = {}
+    for team, fixtures in fixture_data.items():
+        fdr_sum = sum(f['fdr'] for f in fixtures if f['fdr'] != 0)
+        num_fixtures = sum(1 for f in fixtures if f['fdr'] != 0)
+        avg_fdr[team] = fdr_sum / num_fixtures if num_fixtures > 0 else 0
+
+    # Sort teams based on the specified method
+    if sort_method == "fdr":
+        sorted_teams = sorted(fixture_data.keys(), key=lambda x: avg_fdr[x])
+    else:  # alphabetical
+        sorted_teams = sorted(fixture_data.keys())
+
+    # Reorder fixture_data based on the sorting
+    fixture_data = {team: fixture_data[team] for team in sorted_teams}
 
     return fixture_data, start_gw, actual_gameweeks, {v['short']: v['name'] for v in teams.values()}, gw_dates
 
