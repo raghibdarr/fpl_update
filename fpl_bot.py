@@ -187,16 +187,18 @@ async def fixtures(ctx, num_gameweeks: int = 6):
     
     await ctx.send("Generating fixture grid... This may take a moment.")
     
-    fixture_data, current_gw = await fetch_fixture_data(num_gameweeks)
-    image = create_fixture_grid(fixture_data, num_gameweeks, current_gw)
+    fixture_data, start_gw = await fetch_fixture_data(num_gameweeks)
+    image = create_fixture_grid(fixture_data, num_gameweeks, start_gw)
     
     img_byte_arr = io.BytesIO()
     image.save(img_byte_arr, format='PNG')
     img_byte_arr.seek(0)
     
     await ctx.send(file=discord.File(fp=img_byte_arr, filename='fixtures.png'))
-    
+        
 # Function to fetch fixture data
+from datetime import datetime, timezone
+
 async def fetch_fixture_data(num_gameweeks):
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{FPL_API_BASE}fixtures/") as resp:
@@ -205,19 +207,33 @@ async def fetch_fixture_data(num_gameweeks):
             bootstrap = await resp.json()
 
     teams = {team['id']: team['short_name'] for team in bootstrap['teams']}
-    current_gw = next(event['id'] for event in bootstrap['events'] if event['is_current'])
     
+    # Find the current gameweek and check if it has finished
+    current_time = datetime.now(timezone.utc)
+    current_gw = next((event for event in bootstrap['events'] if event['is_current']), None)
+    
+    if current_gw:
+        gw_deadline = datetime.strptime(current_gw['deadline_time'], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        if current_time > gw_deadline:
+            # Current gameweek has ended, move to the next one
+            start_gw = current_gw['id'] + 1
+        else:
+            start_gw = current_gw['id']
+    else:
+        # If no current gameweek found, start from the next upcoming one
+        start_gw = next(event['id'] for event in bootstrap['events'] if not event['finished'])
+
     fixture_data = {team: [{'opponent': '', 'fdr': 0}] * num_gameweeks for team in teams.values()}
 
     for fixture in fixtures:
-        if current_gw <= fixture['event'] < current_gw + num_gameweeks:
-            gw_index = fixture['event'] - current_gw
+        if start_gw <= fixture['event'] < start_gw + num_gameweeks:
+            gw_index = fixture['event'] - start_gw
             home_team = teams[fixture['team_h']]
             away_team = teams[fixture['team_a']]
             fixture_data[home_team][gw_index] = {'opponent': away_team.upper(), 'fdr': fixture['team_h_difficulty']}
             fixture_data[away_team][gw_index] = {'opponent': home_team.lower(), 'fdr': fixture['team_a_difficulty']}
 
-    return fixture_data, current_gw
+    return fixture_data, start_gw
 
 # Function to create fixture grid
 def create_fixture_grid(fixture_data, num_gameweeks, current_gw):
