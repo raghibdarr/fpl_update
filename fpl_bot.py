@@ -256,21 +256,11 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names):
     bold_font = ImageFont.truetype("arialbd.ttf", 16)
     header_font = ImageFont.truetype("arialbd.ttf", 18)
     
-    # Draw headers (without 'Team')
+    # Draw headers
     for i in range(actual_gameweeks):
         gw_number = start_gw + i
         x = team_column_width + spacing + i*cell_width
         draw.text((x + cell_width/2, 25), f"GW{gw_number}", font=header_font, fill='black', anchor="mm")
-        # Draw vertical gridlines for GW columns
-        draw.line([(x, 0), (x, height)], fill='lightgray', width=1)
-    
-    # Draw horizontal gridlines
-    for i in range(len(fixture_data) + 1):
-        y = 50 + i*cell_height
-        draw.line([(0, y), (width, y)], fill='lightgray', width=1)
-    
-    # Draw vertical gridline after team names
-    draw.line([(team_column_width, 50), (team_column_width, height)], fill='lightgray', width=1)
     
     # Draw team names and fixtures
     for i, (team_short, fixtures) in enumerate(fixture_data.items()):
@@ -281,7 +271,7 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names):
             x = team_column_width + spacing + j*cell_width
             color = get_fixture_color(fixture)
             text_color = get_text_color(fixture)
-            draw.rectangle([x, y, x + cell_width, y + cell_height], fill=color)
+            draw.rectangle([x, y, x + cell_width, y + cell_height], fill=color, outline='black')
             
             # Determine if it's a home fixture (uppercase)
             is_home = fixture['opponent'].isupper()
@@ -296,8 +286,17 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names):
             
             draw.text((text_x, text_y), fixture['opponent'], font=text_font, fill=text_color)
     
-    # Draw final vertical gridline
-    draw.line([(width-1, 0), (width-1, height)], fill='lightgray', width=1)
+    # Draw gridlines
+    for i in range(actual_gameweeks + 1):
+        x = team_column_width + spacing + i*cell_width
+        draw.line([(x, 50), (x, height)], fill='black', width=1)
+    
+    for i in range(len(fixture_data) + 2):
+        y = 50 + i*cell_height
+        draw.line([(team_column_width + spacing, y), (width, y)], fill='black', width=1)
+    
+    # Draw vertical line after team names
+    draw.line([(team_column_width, 0), (team_column_width, height)], fill='black', width=1)
     
     return image
     
