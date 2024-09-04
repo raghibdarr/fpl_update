@@ -207,15 +207,15 @@ async def fetch_fixture_data(num_gameweeks):
     teams = {team['id']: team['short_name'] for team in bootstrap['teams']}
     current_gw = next(event['id'] for event in bootstrap['events'] if event['is_current'])
     
-    fixture_data = {team: [''] * num_gameweeks for team in teams.values()}
+    fixture_data = {team: [{'opponent': '', 'fdr': 0}] * num_gameweeks for team in teams.values()}
 
     for fixture in fixtures:
         if current_gw <= fixture['event'] < current_gw + num_gameweeks:
             gw_index = fixture['event'] - current_gw
             home_team = teams[fixture['team_h']]
             away_team = teams[fixture['team_a']]
-            fixture_data[home_team][gw_index] = away_team.upper()
-            fixture_data[away_team][gw_index] = home_team.lower()
+            fixture_data[home_team][gw_index] = {'opponent': away_team.upper(), 'fdr': fixture['team_h_difficulty']}
+            fixture_data[away_team][gw_index] = {'opponent': home_team.lower(), 'fdr': fixture['team_a_difficulty']}
 
     return fixture_data, current_gw
 
@@ -239,18 +239,25 @@ def create_fixture_grid(fixture_data, num_gameweeks, current_gw):
         for j, fixture in enumerate(fixtures):
             color = get_fixture_color(fixture)
             draw.rectangle([100 + j*100, 50 + i*30, 190 + j*100, 70 + i*30], fill=color)
-            draw.text((105 + j*100, 52 + i*30), fixture, font=small_font, fill='black')
+            draw.text((105 + j*100, 52 + i*30), fixture['opponent'], font=small_font, fill='black')
     
     return image
 
 # Function to get fixture color
 def get_fixture_color(fixture):
-    if not fixture:
+    if not fixture['opponent']:
         return 'lightgrey'
-    elif fixture.isupper():
-        return 'lightgreen'
+    fdr = fixture['fdr']
+    if fdr == 1:
+        return '#375523'  # Dark Green
+    elif fdr == 2:
+        return '#01FC7A'  # Light Green
+    elif fdr == 3:
+        return '#E7E7E7'  # Grey
+    elif fdr == 4:
+        return '#FF1751'  # Light Red
     else:
-        return 'pink'
+        return '#80072D'  # Dark Red
 
 # Command to get schedule
 @bot.command()
