@@ -193,6 +193,16 @@ async def fixtures(ctx, *, args=""):
             teams.extend(param.strip().rstrip(',').lower().split(','))
     
     teams = [team.strip() for team in teams if team.strip()]  # Remove empty strings
+    
+    # Handle multi-word team names
+    multi_word_teams = [name.lower() for name in team_aliases.keys() if ' ' in name]
+    for multi_word_team in multi_word_teams:
+        words = multi_word_team.split()
+        if all(word in teams for word in words):
+            for word in words:
+                teams.remove(word)
+            teams.append(multi_word_team)
+    
     num_gameweeks = min(num_gameweeks, 38)  # Cap at 38 gameweeks
 
     print(f"Teams after parsing: {teams}")
