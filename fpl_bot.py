@@ -229,7 +229,10 @@ async def fixtures(ctx, *, args=""):
         await ctx.send(f"An error occurred: {str(e)}")
 
 # Function to fetch fixture data
-async def fetch_fixture_data(num_gameweeks, selected_teams=[]):
+async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="alphabetical"):
+    if selected_teams is None:
+        selected_teams = []
+
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{FPL_API_BASE}fixtures/") as resp:
             fixtures = await resp.json()
@@ -292,12 +295,6 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=[]):
 
     print(f"Number of teams after filtering: {len(fixture_data)}")
 
-    # Get the dates for each gameweek
-    gw_dates = {}
-    for event in bootstrap['events']:
-        if start_gw <= event['id'] < start_gw + actual_gameweeks:
-            gw_dates[event['id']] = datetime.strptime(event['deadline_time'], "%Y-%m-%dT%H:%M:%SZ").strftime("%d/%m")
-
     # Calculate average FDR for each team
     avg_fdr = {}
     for team, fixtures in fixture_data.items():
@@ -313,6 +310,12 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=[]):
 
     # Reorder fixture_data based on the sorting
     fixture_data = {team: fixture_data[team] for team in sorted_teams}
+
+    # Get the dates for each gameweek
+    gw_dates = {}
+    for event in bootstrap['events']:
+        if start_gw <= event['id'] < start_gw + actual_gameweeks:
+            gw_dates[event['id']] = datetime.strptime(event['deadline_time'], "%Y-%m-%dT%H:%M:%SZ").strftime("%d/%m")
 
     return fixture_data, start_gw, actual_gameweeks, {v['short']: v['name'] for v in teams.values()}, gw_dates
 
