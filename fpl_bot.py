@@ -197,7 +197,7 @@ async def fixtures(ctx, num_gameweeks: int = 6):
     img_byte_arr.seek(0)
     
     await ctx.send(file=discord.File(fp=img_byte_arr, filename='fixtures.png'))
-    
+
 # Function to fetch fixture data
 async def fetch_fixture_data(num_gameweeks):
     async with aiohttp.ClientSession() as session:
@@ -244,8 +244,9 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names):
     actual_gameweeks = min(num_gameweeks, 38 - start_gw + 1)
     
     cell_width, cell_height = 100, 30
-    team_column_width = 150  # Increased width for full team names
-    width = team_column_width + (cell_width * actual_gameweeks)
+    team_column_width = 150  # Width for full team names
+    spacing = 20  # Spacing between team column and fixtures
+    width = team_column_width + spacing + (cell_width * actual_gameweeks)
     height = 50 + (cell_height * len(fixture_data))
     image = Image.new('RGB', (width, height), color='white')
     draw = ImageDraw.Draw(image)
@@ -255,11 +256,21 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names):
     bold_font = ImageFont.truetype("arialbd.ttf", 16)
     header_font = ImageFont.truetype("arialbd.ttf", 18)
     
-    # Draw headers
-    draw.text((10, 25), "Team", font=header_font, fill='black', anchor="lm")
+    # Draw headers (without 'Team')
     for i in range(actual_gameweeks):
         gw_number = start_gw + i
-        draw.text((team_column_width + 50 + i*cell_width, 25), f"GW{gw_number}", font=header_font, fill='black', anchor="mm")
+        x = team_column_width + spacing + i*cell_width
+        draw.text((x + cell_width/2, 25), f"GW{gw_number}", font=header_font, fill='black', anchor="mm")
+        # Draw vertical gridlines for GW columns
+        draw.line([(x, 0), (x, height)], fill='lightgray', width=1)
+    
+    # Draw horizontal gridlines
+    for i in range(len(fixture_data) + 1):
+        y = 50 + i*cell_height
+        draw.line([(0, y), (width, y)], fill='lightgray', width=1)
+    
+    # Draw vertical gridline after team names
+    draw.line([(team_column_width, 50), (team_column_width, height)], fill='lightgray', width=1)
     
     # Draw team names and fixtures
     for i, (team_short, fixtures) in enumerate(fixture_data.items()):
@@ -267,7 +278,7 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names):
         team_full = team_names[team_short]
         draw.text((10, y + cell_height/2), team_full, font=bold_font, fill='black', anchor="lm")
         for j, fixture in enumerate(fixtures[:actual_gameweeks]):
-            x = team_column_width + j*cell_width
+            x = team_column_width + spacing + j*cell_width
             color = get_fixture_color(fixture)
             text_color = get_text_color(fixture)
             draw.rectangle([x, y, x + cell_width, y + cell_height], fill=color)
@@ -284,6 +295,9 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names):
             text_y = y + (cell_height - text_height) / 2
             
             draw.text((text_x, text_y), fixture['opponent'], font=text_font, fill=text_color)
+    
+    # Draw final vertical gridline
+    draw.line([(width-1, 0), (width-1, height)], fill='lightgray', width=1)
     
     return image
     
