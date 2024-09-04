@@ -180,26 +180,40 @@ async def player(ctx, *, player_name):
 
 # Command to get fixtures
 @bot.command()
-async def fixtures(ctx, num_gameweeks: int = 6):
-    if num_gameweeks < 1:
-        await ctx.send("Please specify a number of gameweeks between 1 and 38.")
-        return
+async def fixtures(ctx, *, args=""):
+    # Parse arguments
+    params = args.split()
+    num_gameweeks = 6  # Default
+    teams = []
     
+    for param in params:
+        if param.isdigit():
+            num_gameweeks = min(int(param), 38)
+        else:
+            teams.extend(param.strip().rstrip(',').lower().split(','))
+    
+    teams = [team.strip() for team in teams if team.strip()]  # Remove empty strings
     num_gameweeks = min(num_gameweeks, 38)  # Cap at 38 gameweeks
     
     await ctx.send("Generating fixture grid... This may take a moment.")
     
-    fixture_data, start_gw, actual_gameweeks, team_names, gw_dates = await fetch_fixture_data(num_gameweeks)
-    image = create_fixture_grid(fixture_data, actual_gameweeks, start_gw, team_names, gw_dates)
-    
-    img_byte_arr = io.BytesIO()
-    image.save(img_byte_arr, format='PNG')
-    img_byte_arr.seek(0)
-    
-    await ctx.send(file=discord.File(fp=img_byte_arr, filename='fixtures.png'))   
+    try:
+        fixture_data, start_gw, actual_gameweeks, team_names, gw_dates = await fetch_fixture_data(num_gameweeks, teams)
+        if not fixture_data:
+            await ctx.send("No valid teams found. Please check your team names and try again.")
+            return
+        image = create_fixture_grid(fixture_data, actual_gameweeks, start_gw, team_names, gw_dates)
+        
+        img_byte_arr = io.BytesIO()
+        image.save(img_byte_arr, format='PNG')
+        img_byte_arr.seek(0)
+        
+        await ctx.send(file=discord.File(fp=img_byte_arr, filename='fixtures.png'))
+    except Exception as e:
+        await ctx.send(f"An error occurred: {str(e)}")
 
 # Function to fetch fixture data
-async def fetch_fixture_data(num_gameweeks):
+async def fetch_fixture_data(num_gameweeks, selected_teams=[]):
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{FPL_API_BASE}fixtures/") as resp:
             fixtures = await resp.json()
@@ -236,6 +250,17 @@ async def fetch_fixture_data(num_gameweeks):
             fixture_data[home_team][gw_index] = {'opponent': away_team.upper(), 'fdr': fixture['team_h_difficulty']}
             fixture_data[away_team][gw_index] = {'opponent': home_team.lower(), 'fdr': fixture['team_a_difficulty']}
 
+    # Filter teams if selected_teams is not empty
+    if selected_teams:
+        filtered_fixture_data = {}
+        for team, fixtures in fixture_data.items():
+            team_full_name = next((name for name, aliases in team_aliases.items() if team in aliases), None)
+            if team_full_name:
+                if any(any(alias.lower() in selected_team.lower() for alias in team_aliases[team_full_name]) 
+                       for selected_team in selected_teams):
+                    filtered_fixture_data[team] = fixtures
+        fixture_data = filtered_fixture_data
+
     # Get the dates for each gameweek
     gw_dates = {}
     for event in bootstrap['events']:
@@ -243,7 +268,7 @@ async def fetch_fixture_data(num_gameweeks):
             gw_dates[event['id']] = datetime.strptime(event['deadline_time'], "%Y-%m-%dT%H:%M:%SZ").strftime("%d/%m")
 
     return fixture_data, start_gw, actual_gameweeks, {v['short']: v['name'] for v in teams.values()}, gw_dates
-    
+
 # Function to create fixture grid
 def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names, gw_dates):
     # Calculate the actual number of gameweeks to display
