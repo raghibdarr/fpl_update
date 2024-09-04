@@ -251,7 +251,7 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names, gw_da
     
     cell_width, cell_height = 100, 30
     team_column_width = 120  # Width for team names
-    spacing = 20  # Spacing between team column and fixtures
+    spacing = 10  # Reduced spacing to match the gap above
     padding = 20  # Padding around the entire grid
     header_height = 50  # Height for GW and date headers
     gap_height = 10  # Gap between headers and fixture grid
@@ -298,14 +298,8 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names, gw_da
             is_home = fixture['opponent'].isupper()
             text_font = bold_font if is_home else font
             
-            # Center the text
-            text_bbox = text_font.getbbox(fixture['opponent'])
-            text_width = text_bbox[2] - text_bbox[0]
-            text_height = text_bbox[3] - text_bbox[1]
-            text_x = x + (cell_width - text_width) / 2
-            text_y = y + (cell_height - text_height) / 2
-            
-            draw.text((text_x, text_y), fixture['opponent'], font=text_font, fill=text_color)
+            # Center the text both horizontally and vertically
+            draw.text((x + cell_width/2, y + cell_height/2), fixture['opponent'], font=text_font, fill=text_color, anchor="mm")
     
     # Draw gridlines for fixture area
     for i in range(actual_gameweeks + 1):
