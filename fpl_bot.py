@@ -2,9 +2,9 @@ import discord
 from discord.ext import commands
 import aiohttp
 import asyncio
-from fuzzywuzzy import process
+from fuzzywuzzy import process, fuzz
 import difflib
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from discord import Embed, Color
 import os
 from dotenv import load_dotenv
@@ -94,21 +94,10 @@ def fetch_current_standings():
     response = requests.get(url, headers=headers)
     data = response.json()
     
-    standings = {}
-    for team in data['standings'][0]['table']:
-        standings[team['team']['name']] = {
-            'position': team['position'],
-            'points': team['points'],
-            'played': team['playedGames'],
-            'won': team['won'],
-            'drawn': team['draw'],
-            'lost': team['lost'],
-            'goalsFor': team['goalsFor'],
-            'goalsAgainst': team['goalsAgainst'],
-            'goalDifference': team['goalDifference']
-        }
+    print("Structure of standings data:")
+    print(json.dumps(data['standings'][0]['table'][0], indent=2))
     
-    return standings
+    return data['standings'][0]['table']
 
 # Command to display the league table
 @bot.command()
@@ -353,34 +342,135 @@ async def fixtures(ctx, *, args=""):
     except Exception as e:
         await ctx.send(f"An error occurred: {str(e)}")
 
+# Function to load or update the PL teams data
+def load_pl_teams():
+    try:
+        with open('pl_teams.json', 'r') as f:
+            data = json.load(f)
+        # Check if the data is older than 3 months
+        last_updated = datetime.fromisoformat(data['last_updated'])
+        if datetime.now() - last_updated > timedelta(days=90):
+            return update_pl_teams()
+        return data['teams']
+    except (FileNotFoundError, json.JSONDecodeError, KeyError):
+        return update_pl_teams()
+
+# Function to update the PL teams data
+def update_pl_teams():
+    teams = fetch_current_pl_teams()
+    data = {
+        'last_updated': datetime.now().isoformat(),
+        'teams': teams
+    }
+    with open('pl_teams.json', 'w') as f:
+        json.dump(data, f)
+    return teams
+
+# Function to fetch the current PL teams data
+def fetch_current_pl_teams():
+    url = "http://api.football-data.org/v4/competitions/PL/teams"
+    headers = {"X-Auth-Token": FOOTBALL_DATA_API_KEY}
+    
+    response = requests.get(url, headers=headers)
+    data = response.json()
+    
+    team_names = [team['name'] for team in data['teams']]
+    
+    print("Team names from Football-Data.org API:")
+    for name in team_names:
+        print(name)
+    
+    return team_names
+
+# Call this function to see the list of team names
+current_pl_teams = fetch_current_pl_teams()
+
+@bot.command()
+async def show_team_names(ctx):
+    team_names = fetch_current_pl_teams()
+    message = "Team names from Football-Data.org API:\n" + "\n".join(team_names)
+    await ctx.send(message)
+
+def format_team_name(name):
+    # Map Football-Data.org names to FPL names
+    name_mapping = {
+        "Arsenal FC": "Arsenal",
+        "Aston Villa FC": "Aston Villa",
+        "AFC Bournemouth": "Bournemouth",
+        "Brentford FC": "Brentford",
+        "Brighton & Hove Albion FC": "Brighton",
+        "Chelsea FC": "Chelsea",
+        "Crystal Palace FC": "Crystal Palace",
+        "Everton FC": "Everton",
+        "Fulham FC": "Fulham",
+        "Liverpool FC": "Liverpool",
+        "Manchester City FC": "Man City",
+        "Manchester United FC": "Man Utd",
+        "Newcastle United FC": "Newcastle",
+        "Nottingham Forest FC": "Nott'm Forest",
+        "Sheffield United FC": "Sheffield Utd",
+        "Tottenham Hotspur FC": "Spurs",
+        "West Ham United FC": "West Ham",
+        "Wolverhampton Wanderers FC": "Wolves",
+        "Burnley FC": "Burnley",
+        "Luton Town FC": "Luton"
+    }
+    return name_mapping.get(name, name)
+
 # Function to fetch fixture data
 async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="alphabetical"):
     if selected_teams is None:
         selected_teams = []
 
+    # Fetch FPL data
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{FPL_API_BASE}fixtures/") as resp:
             fixtures = await resp.json()
         
-        # Fetch bootstrap data
         async with session.get(f"{FPL_API_BASE}bootstrap-static/") as resp:
             bootstrap = await resp.json()
     
-    # Fetch current standings
-    standings = await fetch_standings_data()
-    
+    # Fetch current standings from Football-Data.org API
+    current_standings = fetch_current_standings()
+
+    # Print out the standings data for debugging
+    print("Current standings data:")
+    for team in current_standings:
+        print(f"{team['team']['name']} (TLA: {team['team']['tla']}) - Position: {team['position']}")
+
+    # Create a mapping of FPL team names to Football-Data.org team names
+    fpl_to_football_data = {}
+    for fpl_team in bootstrap['teams']:
+        # First, try to match by TLA (short name)
+        tla_match = next((st for st in current_standings if st['team']['tla'] == fpl_team['short_name']), None)
+        if tla_match:
+            fpl_to_football_data[fpl_team['name']] = tla_match['team']['name']
+        else:
+            # If no TLA match, use fuzzy matching
+            best_match = None
+            highest_ratio = 0
+            for standings_team in current_standings:
+                ratio = fuzz.partial_ratio(fpl_team['name'].lower(), standings_team['team']['name'].lower())
+                if ratio > highest_ratio:
+                    highest_ratio = ratio
+                    best_match = standings_team['team']['name']
+            
+            if best_match:
+                fpl_to_football_data[fpl_team['name']] = best_match
+            else:
+                print(f"Warning: No match found for {fpl_team['name']}")
+                fpl_to_football_data[fpl_team['name']] = fpl_team['name']
+
     teams = {team['id']: {
         'short': team['short_name'],
         'name': team['name'],
-        'position': team['position'],
-        'points': team['points']
-    } for team in standings}
-    
-    short_to_position = {team['short_name']: team['position'] for team in standings}
+        'position': next((t['position'] for t in current_standings if t['team']['name'] == fpl_to_football_data[team['name']]), 0)
+    } for team in bootstrap['teams']}
 
-    print("\nProcessed standings data:")
-    for team in standings:
-        print(f"{team['short_name']}: {team}")
+    # Print out the mappings and positions for debugging
+    print("Team mappings and positions:")
+    for team in teams.values():
+        print(f"{team['short']}: {team['name']} -> {fpl_to_football_data[team['name']]} (Position: {team['position']})")
 
     current_time = datetime.now(timezone.utc)
     current_gw = next((event for event in bootstrap['events'] if event['is_current']), None)
@@ -388,15 +478,12 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
     if current_gw:
         gw_deadline = datetime.strptime(current_gw['deadline_time'], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
         if current_time > gw_deadline:
-            # Current gameweek has ended, move to the next one
             start_gw = current_gw['id'] + 1
         else:
             start_gw = current_gw['id']
     else:
-        # If no current gameweek found, start from the next upcoming one
         start_gw = next(event['id'] for event in bootstrap['events'] if not event['finished'])
 
-    # Ensure we don't go beyond GW38
     actual_gameweeks = min(num_gameweeks, 38 - start_gw + 1)
 
     fixture_data = {team['short']: [{'opponent': '', 'fdr': 0}] * actual_gameweeks for team in teams.values()}
@@ -409,52 +496,20 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
             fixture_data[home_team][gw_index] = {'opponent': away_team.upper(), 'fdr': fixture['team_h_difficulty']}
             fixture_data[away_team][gw_index] = {'opponent': home_team.lower(), 'fdr': fixture['team_a_difficulty']}
 
-    # Fetch current standings from Football-Data.org API
-    current_standings = fetch_current_standings()
-
-    # Mapping between FPL team names and Football-Data.org team names
-    team_name_mapping = {
-        "Arsenal": "Arsenal FC",
-        "Aston Villa": "Aston Villa FC",
-        "Bournemouth": "AFC Bournemouth",
-        "Brentford": "Brentford FC",
-        "Brighton": "Brighton & Hove Albion FC",
-        "Chelsea": "Chelsea FC",
-        "Crystal Palace": "Crystal Palace FC",
-        "Everton": "Everton FC",
-        "Fulham": "Fulham FC",
-        "Liverpool": "Liverpool FC",
-        "Man City": "Manchester City FC",
-        "Man Utd": "Manchester United FC",
-        "Newcastle": "Newcastle United FC",
-        "Nott'm Forest": "Nottingham Forest FC",
-        "Sheffield Utd": "Sheffield United FC",
-        "Spurs": "Tottenham Hotspur FC",
-        "West Ham": "West Ham United FC",
-        "Wolves": "Wolverhampton Wanderers FC",
-        "Burnley": "Burnley FC",
-        "Luton": "Luton Town FC"
-    }
-
-    print(f"Sort method: {sort_method}")
-    print("Short to position mapping:")
-    for short, position in short_to_position.items():
-        print(f"{short}: {position}")
-
     # Sort teams based on the specified method
     if sort_method == "fdr":
         avg_fdr = {team: sum(f['fdr'] for f in fixtures if f['fdr'] != 0) / sum(1 for f in fixtures if f['fdr'] != 0) for team, fixtures in fixture_data.items()}
         sorted_teams = sorted(fixture_data.keys(), key=lambda x: avg_fdr[x])
     elif sort_method == "table":
-        sorted_teams = sorted(teams.values(), key=lambda x: current_standings[team_name_mapping[x['name']]]['position'])
-        sorted_teams = [team['short_name'] for team in sorted_teams]
+        sorted_teams = sorted(teams.values(), key=lambda x: x['position'])
+        sorted_teams = [team['short'] for team in sorted_teams]
     else:  # alphabetical
         sorted_teams = sorted(fixture_data.keys())
 
     print("Sorted teams order:")
     for team in sorted_teams:
-        full_name = next(name for name, short in team_name_mapping.items() if teams[next(t for t in teams if teams[t]['short_name'] == team)]['name'] == name)
-        print(f"{team}: Position {current_standings[team_name_mapping[full_name]]['position']}")
+        full_name = next(name for name, data in teams.items() if data['short'] == team)
+        print(f"{team}: Position {teams[full_name]['position']}")
 
     # Reorder fixture_data based on the sorting
     fixture_data = {team: fixture_data[team] for team in sorted_teams}
