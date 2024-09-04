@@ -73,7 +73,7 @@ async def fetch_standings_data():
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{FPL_API_BASE}bootstrap-static/") as resp:
             data = await resp.json()
-    return data['teams']
+    return sorted(data['teams'], key=lambda x: x['position'])
 
 # Command to display the league table
 @bot.command()
@@ -280,7 +280,7 @@ async def fixtures(ctx, *, args=""):
     for param in params:
         if param.isdigit():
             num_gameweeks = min(int(param), 38)
-        elif param.lower() in ["fdr", "alphabetical"]:
+        elif param.lower() in ["fdr", "alphabetical", "table"]:
             sort_method = param.lower()
         else:
             teams.extend(param.strip().rstrip(',').lower().split(','))
@@ -329,11 +329,7 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
         async with session.get(f"{FPL_API_BASE}bootstrap-static/") as resp:
             bootstrap = await resp.json()
 
-    teams = {team['id']: {'short': team['short_name'], 'name': team['name']} for team in bootstrap['teams']}
-    
-    print("Team aliases:")
-    for team, aliases in team_aliases.items():
-        print(f"{team}: {aliases}")
+    teams = {team['id']: {'short': team['short_name'], 'name': team['name'], 'position': team['position']} for team in bootstrap['teams']}
 
     # Find the current gameweek and check if it has finished
     current_time = datetime.now(timezone.utc)
@@ -363,38 +359,21 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
             fixture_data[home_team][gw_index] = {'opponent': away_team.upper(), 'fdr': fixture['team_h_difficulty']}
             fixture_data[away_team][gw_index] = {'opponent': home_team.lower(), 'fdr': fixture['team_a_difficulty']}
 
-    print(f"Selected teams: {selected_teams}")
-    print(f"Number of teams before filtering: {len(fixture_data)}")
-
-    # Create a mapping from short names to full names
-    short_to_full = {alias.lower(): full_name for full_name, aliases in team_aliases.items() for alias in aliases}
-
     # Filter teams if selected_teams is not empty
     if selected_teams:
         filtered_fixture_data = {}
         for team_short, fixtures in fixture_data.items():
-            print(f"Checking team: {team_short}")
-            team_full_name = short_to_full.get(team_short.lower())
-            print(f"Full name for {team_short}: {team_full_name}")
-            if team_full_name:
-                if any(selected_team.lower() in [alias.lower() for alias in team_aliases[team_full_name]] 
-                       for selected_team in selected_teams):
-                    print(f"Match found for {team_short}")
-                    filtered_fixture_data[team_short] = fixtures
+            team_full_name = next((name for name, aliases in team_aliases.items() if team_short.lower() in [alias.lower() for alias in aliases]), None)
+            if team_full_name and any(selected_team.lower() in [alias.lower() for alias in team_aliases[team_full_name]] for selected_team in selected_teams):
+                filtered_fixture_data[team_short] = fixtures
         fixture_data = filtered_fixture_data
-
-    print(f"Number of teams after filtering: {len(fixture_data)}")
-
-    # Calculate average FDR for each team
-    avg_fdr = {}
-    for team, fixtures in fixture_data.items():
-        fdr_sum = sum(f['fdr'] for f in fixtures if f['fdr'] != 0)
-        num_fixtures = sum(1 for f in fixtures if f['fdr'] != 0)
-        avg_fdr[team] = fdr_sum / num_fixtures if num_fixtures > 0 else 0
 
     # Sort teams based on the specified method
     if sort_method == "fdr":
+        avg_fdr = {team: sum(f['fdr'] for f in fixtures if f['fdr'] != 0) / sum(1 for f in fixtures if f['fdr'] != 0) for team, fixtures in fixture_data.items()}
         sorted_teams = sorted(fixture_data.keys(), key=lambda x: avg_fdr[x])
+    elif sort_method == "table":
+        sorted_teams = sorted(fixture_data.keys(), key=lambda x: next(team['position'] for team in teams.values() if team['short'] == x))
     else:  # alphabetical
         sorted_teams = sorted(fixture_data.keys())
 
