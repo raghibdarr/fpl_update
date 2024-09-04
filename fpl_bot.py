@@ -181,9 +181,11 @@ async def player(ctx, *, player_name):
 # Command to get fixtures
 @bot.command()
 async def fixtures(ctx, num_gameweeks: int = 6):
-    if num_gameweeks < 1 or num_gameweeks > 38:
+    if num_gameweeks < 1:
         await ctx.send("Please specify a number of gameweeks between 1 and 38.")
         return
+    
+    num_gameweeks = min(num_gameweeks, 38)  # Cap at 38 gameweeks
     
     await ctx.send("Generating fixture grid... This may take a moment.")
     
@@ -195,10 +197,8 @@ async def fixtures(ctx, num_gameweeks: int = 6):
     img_byte_arr.seek(0)
     
     await ctx.send(file=discord.File(fp=img_byte_arr, filename='fixtures.png'))
-        
-# Function to fetch fixture data
-from datetime import datetime, timezone
 
+# Function to fetch fixture data
 async def fetch_fixture_data(num_gameweeks):
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{FPL_API_BASE}fixtures/") as resp:
@@ -223,6 +223,9 @@ async def fetch_fixture_data(num_gameweeks):
         # If no current gameweek found, start from the next upcoming one
         start_gw = next(event['id'] for event in bootstrap['events'] if not event['finished'])
 
+    # Ensure we don't go beyond GW38
+    num_gameweeks = min(num_gameweeks, 38 - start_gw + 1)
+
     fixture_data = {team: [{'opponent': '', 'fdr': 0}] * num_gameweeks for team in teams.values()}
 
     for fixture in fixtures:
@@ -236,7 +239,7 @@ async def fetch_fixture_data(num_gameweeks):
     return fixture_data, start_gw
 
 # Function to create fixture grid
-def create_fixture_grid(fixture_data, num_gameweeks, current_gw):
+def create_fixture_grid(fixture_data, num_gameweeks, start_gw):
     width, height = 100 + (100 * num_gameweeks), 50 + (30 * len(fixture_data))
     image = Image.new('RGB', (width, height), color='white')
     draw = ImageDraw.Draw(image)
@@ -247,7 +250,8 @@ def create_fixture_grid(fixture_data, num_gameweeks, current_gw):
     # Draw headers
     draw.text((10, 10), "Team", font=font, fill='black')
     for i in range(num_gameweeks):
-        draw.text((110 + i*100, 10), f"GW{i+current_gw}", font=font, fill='black')
+        gw_number = min(start_gw + i, 38)  # Cap at GW38
+        draw.text((110 + i*100, 10), f"GW{gw_number}", font=font, fill='black')
     
     # Draw team names and fixtures
     for i, (team, fixtures) in enumerate(fixture_data.items()):
