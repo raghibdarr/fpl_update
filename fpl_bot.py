@@ -67,6 +67,36 @@ async def fetch_fpl_data(endpoint):
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{FPL_API_BASE}{endpoint}") as response:
             return await response.json()
+        
+# Function to fetch standings data from the FPL API
+async def fetch_standings_data():
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{FPL_API_BASE}bootstrap-static/") as resp:
+            data = await resp.json()
+    return data['teams']
+
+@bot.command()
+async def table(ctx):
+    try:
+        standings_data = await fetch_standings_data()
+        
+        # Sort teams by position
+        sorted_teams = sorted(standings_data, key=lambda x: x['position'])
+        
+        # Create the table message
+        table_message = "```\n"
+        table_message += f"{'Pos':^4}{'Team':<20}{'Played':^8}{'Won':^6}{'Drawn':^6}{'Lost':^6}{'GF':^6}{'GA':^6}{'GD':^6}{'Points':^8}\n"
+        table_message += "-" * 76 + "\n"
+        
+        for team in sorted_teams:
+            table_message += f"{team['position']:^4}{team['name']:<20}{team['played']:^8}{team['win']:^6}{team['draw']:^6}"
+            table_message += f"{team['loss']:^6}{team['goals_for']:^6}{team['goals_against']:^6}{team['goal_difference']:^6}{team['points']:^8}\n"
+        
+        table_message += "```"
+        
+        await ctx.send(table_message)
+    except Exception as e:
+        await ctx.send(f"An error occurred: {str(e)}")
 
 # Database setup
 async def setup_database():
