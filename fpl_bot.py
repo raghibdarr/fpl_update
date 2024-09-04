@@ -13,10 +13,12 @@ import aiosqlite
 from PIL import Image, ImageDraw, ImageFont
 import io
 import json
+import requests
 
 # Load environment variables
 load_dotenv()
 TOKEN = os.getenv('DISCORD_TOKEN')
+FOOTBALL_DATA_API_KEY = os.getenv('FOOTBALL_DATA_API_KEY')
 
 # FDR color mapping
 def get_fdr_color(difficulty):
@@ -84,6 +86,29 @@ async def fetch_standings_data():
         print(json.dumps(team, indent=2))
     
     return sorted_teams
+
+def fetch_current_standings():
+    url = "http://api.football-data.org/v4/competitions/PL/standings"
+    headers = {"X-Auth-Token": FOOTBALL_DATA_API_KEY}
+    
+    response = requests.get(url, headers=headers)
+    data = response.json()
+    
+    standings = {}
+    for team in data['standings'][0]['table']:
+        standings[team['team']['name']] = {
+            'position': team['position'],
+            'points': team['points'],
+            'played': team['playedGames'],
+            'won': team['won'],
+            'drawn': team['draw'],
+            'lost': team['lost'],
+            'goalsFor': team['goalsFor'],
+            'goalsAgainst': team['goalsAgainst'],
+            'goalDifference': team['goalDifference']
+        }
+    
+    return standings
 
 # Command to display the league table
 @bot.command()
@@ -384,6 +409,33 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
             fixture_data[home_team][gw_index] = {'opponent': away_team.upper(), 'fdr': fixture['team_h_difficulty']}
             fixture_data[away_team][gw_index] = {'opponent': home_team.lower(), 'fdr': fixture['team_a_difficulty']}
 
+    # Fetch current standings from Football-Data.org API
+    current_standings = fetch_current_standings()
+
+    # Mapping between FPL team names and Football-Data.org team names
+    team_name_mapping = {
+        "Arsenal": "Arsenal FC",
+        "Aston Villa": "Aston Villa FC",
+        "Bournemouth": "AFC Bournemouth",
+        "Brentford": "Brentford FC",
+        "Brighton": "Brighton & Hove Albion FC",
+        "Chelsea": "Chelsea FC",
+        "Crystal Palace": "Crystal Palace FC",
+        "Everton": "Everton FC",
+        "Fulham": "Fulham FC",
+        "Liverpool": "Liverpool FC",
+        "Man City": "Manchester City FC",
+        "Man Utd": "Manchester United FC",
+        "Newcastle": "Newcastle United FC",
+        "Nott'm Forest": "Nottingham Forest FC",
+        "Sheffield Utd": "Sheffield United FC",
+        "Spurs": "Tottenham Hotspur FC",
+        "West Ham": "West Ham United FC",
+        "Wolves": "Wolverhampton Wanderers FC",
+        "Burnley": "Burnley FC",
+        "Luton": "Luton Town FC"
+    }
+
     print(f"Sort method: {sort_method}")
     print("Short to position mapping:")
     for short, position in short_to_position.items():
@@ -394,13 +446,15 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
         avg_fdr = {team: sum(f['fdr'] for f in fixtures if f['fdr'] != 0) / sum(1 for f in fixtures if f['fdr'] != 0) for team, fixtures in fixture_data.items()}
         sorted_teams = sorted(fixture_data.keys(), key=lambda x: avg_fdr[x])
     elif sort_method == "table":
-        sorted_teams = sorted(fixture_data.keys(), key=lambda x: short_to_position[x])
+        sorted_teams = sorted(teams.values(), key=lambda x: current_standings[team_name_mapping[x['name']]]['position'])
+        sorted_teams = [team['short_name'] for team in sorted_teams]
     else:  # alphabetical
         sorted_teams = sorted(fixture_data.keys())
 
     print("Sorted teams order:")
     for team in sorted_teams:
-        print(f"{team}: Position {short_to_position[team]}")
+        full_name = next(name for name, short in team_name_mapping.items() if teams[next(t for t in teams if teams[t]['short_name'] == team)]['name'] == name)
+        print(f"{team}: Position {current_standings[team_name_mapping[full_name]]['position']}")
 
     # Reorder fixture_data based on the sorting
     fixture_data = {team: fixture_data[team] for team in sorted_teams}
