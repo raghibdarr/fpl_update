@@ -178,9 +178,79 @@ async def player(ctx, *, player_name):
         print(f"An error occurred: {str(e)}")
         await ctx.send(f"An error occurred: {str(e)}")
 
+# Command to get fixtures
 @bot.command()
 async def fixtures(ctx, num_gameweeks: int = 6):
-    await ctx.send("This command is under development. Please use !schedule to see the current gameweek's fixtures.")
+    if num_gameweeks < 1 or num_gameweeks > 38:
+        await ctx.send("Please specify a number of gameweeks between 1 and 38.")
+        return
+    
+    await ctx.send("Generating fixture grid... This may take a moment.")
+    
+    fixture_data = await fetch_fixture_data(num_gameweeks)
+    image = create_fixture_grid(fixture_data, num_gameweeks)
+    
+    img_byte_arr = io.BytesIO()
+    image.save(img_byte_arr, format='PNG')
+    img_byte_arr.seek(0)
+    
+    await ctx.send(file=discord.File(fp=img_byte_arr, filename='fixtures.png'))
+
+# Function to fetch fixture data
+async def fetch_fixture_data(num_gameweeks):
+    async with aiohttp.ClientSession() as session:
+        async with session.get(f"{FPL_API_BASE}fixtures/") as resp:
+            fixtures = await resp.json()
+        async with session.get(f"{FPL_API_BASE}bootstrap-static/") as resp:
+            bootstrap = await resp.json()
+
+    teams = {team['id']: team['short_name'] for team in bootstrap['teams']}
+    current_gw = next(event['id'] for event in bootstrap['events'] if event['is_current'])
+    
+    fixture_data = {team: [''] * num_gameweeks for team in teams.values()}
+
+    for fixture in fixtures:
+        if current_gw <= fixture['event'] < current_gw + num_gameweeks:
+            gw_index = fixture['event'] - current_gw
+            home_team = teams[fixture['team_h']]
+            away_team = teams[fixture['team_a']]
+            fixture_data[home_team][gw_index] = away_team.upper()
+            fixture_data[away_team][gw_index] = home_team.lower()
+
+    return fixture_data
+
+# Function to create fixture grid
+def create_fixture_grid(fixture_data, num_gameweeks):
+    width, height = 100 + (100 * num_gameweeks), 50 + (30 * len(fixture_data))
+    image = Image.new('RGB', (width, height), color='white')
+    draw = ImageDraw.Draw(image)
+    
+    font = ImageFont.load_default().font_variant(size=20)
+    small_font = ImageFont.load_default().font_variant(size=16)
+    
+    # Draw headers
+    draw.text((10, 10), "Team", font=font, fill='black')
+    for i in range(num_gameweeks):
+        draw.text((110 + i*100, 10), f"GW{i+current_gw}", font=font, fill='black')
+    
+    # Draw team names and fixtures
+    for i, (team, fixtures) in enumerate(fixture_data.items()):
+        draw.text((10, 50 + i*30), team, font=small_font, fill='black')
+        for j, fixture in enumerate(fixtures):
+            color = get_fixture_color(fixture)
+            draw.rectangle([100 + j*100, 50 + i*30, 190 + j*100, 70 + i*30], fill=color)
+            draw.text((105 + j*100, 52 + i*30), fixture, font=small_font, fill='black')
+    
+    return image
+
+# Function to get fixture color
+def get_fixture_color(fixture):
+    if not fixture:
+        return 'lightgrey'
+    elif fixture.isupper():
+        return 'lightgreen'
+    else:
+        return 'pink'
 
 # Command to get schedule
 @bot.command()
