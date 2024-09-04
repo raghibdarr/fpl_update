@@ -197,7 +197,7 @@ async def fixtures(ctx, num_gameweeks: int = 6):
     img_byte_arr.seek(0)
     
     await ctx.send(file=discord.File(fp=img_byte_arr, filename='fixtures.png'))
-    
+
 # Function to fetch fixture data
 async def fetch_fixture_data(num_gameweeks):
     async with aiohttp.ClientSession() as session:
@@ -261,11 +261,12 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw):
         draw.text((10, 50 + i*30), team, font=small_font, fill='black')
         for j, fixture in enumerate(fixtures[:actual_gameweeks]):  # Limit to actual gameweeks
             color = get_fixture_color(fixture)
+            text_color = get_text_color(fixture)
             draw.rectangle([100 + j*100, 50 + i*30, 190 + j*100, 70 + i*30], fill=color)
-            draw.text((105 + j*100, 52 + i*30), fixture['opponent'], font=small_font, fill='black')
+            draw.text((105 + j*100, 52 + i*30), fixture['opponent'], font=small_font, fill=text_color)
     
     return image
-
+    
 # Function to get fixture color
 def get_fixture_color(fixture):
     if not fixture['opponent']:
@@ -281,6 +282,12 @@ def get_fixture_color(fixture):
         return '#FF1751'  # Light Red
     else:
         return '#80072D'  # Dark Red
+    
+# Helper function to get text color based on FDR (white for FDR with red background - 4 or higher)
+def get_text_color(fixture):
+    if fixture['fdr'] >= 4:
+        return 'white'
+    return 'black'
 
 # Command to get schedule
 @bot.command()
