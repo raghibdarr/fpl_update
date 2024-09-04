@@ -243,27 +243,45 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw):
     # Calculate the actual number of gameweeks to display
     actual_gameweeks = min(num_gameweeks, 38 - start_gw + 1)
     
-    width, height = 100 + (100 * actual_gameweeks), 50 + (30 * len(fixture_data))
+    cell_width, cell_height = 100, 30
+    width = 100 + (cell_width * actual_gameweeks)
+    height = 50 + (cell_height * len(fixture_data))
     image = Image.new('RGB', (width, height), color='white')
     draw = ImageDraw.Draw(image)
     
-    font = ImageFont.load_default().font_variant(size=20)
-    small_font = ImageFont.load_default().font_variant(size=16)
+    # Load fonts
+    font = ImageFont.truetype("arial.ttf", 16)
+    bold_font = ImageFont.truetype("arialbd.ttf", 16)
+    header_font = ImageFont.truetype("arialbd.ttf", 18)
     
     # Draw headers
-    draw.text((10, 10), "Team", font=font, fill='black')
+    draw.text((10, 25), "Team", font=header_font, fill='black', anchor="lm")
     for i in range(actual_gameweeks):
         gw_number = start_gw + i
-        draw.text((110 + i*100, 10), f"GW{gw_number}", font=font, fill='black')
+        draw.text((150 + i*cell_width, 25), f"GW{gw_number}", font=header_font, fill='black', anchor="mm")
     
     # Draw team names and fixtures
     for i, (team, fixtures) in enumerate(fixture_data.items()):
-        draw.text((10, 50 + i*30), team, font=small_font, fill='black')
-        for j, fixture in enumerate(fixtures[:actual_gameweeks]):  # Limit to actual gameweeks
+        y = 50 + i*cell_height
+        draw.text((50, y + cell_height/2), team, font=font, fill='black', anchor="mm")
+        for j, fixture in enumerate(fixtures[:actual_gameweeks]):
+            x = 100 + j*cell_width
             color = get_fixture_color(fixture)
             text_color = get_text_color(fixture)
-            draw.rectangle([100 + j*100, 50 + i*30, 190 + j*100, 70 + i*30], fill=color)
-            draw.text((105 + j*100, 52 + i*30), fixture['opponent'], font=small_font, fill=text_color)
+            draw.rectangle([x, y, x + cell_width, y + cell_height], fill=color)
+            
+            # Determine if it's a home fixture (uppercase)
+            is_home = fixture['opponent'].isupper()
+            text_font = bold_font if is_home else font
+            
+            # Center the text
+            text_bbox = text_font.getbbox(fixture['opponent'])
+            text_width = text_bbox[2] - text_bbox[0]
+            text_height = text_bbox[3] - text_bbox[1]
+            text_x = x + (cell_width - text_width) / 2
+            text_y = y + (cell_height - text_height) / 2
+            
+            draw.text((text_x, text_y), fixture['opponent'], font=text_font, fill=text_color)
     
     return image
     
