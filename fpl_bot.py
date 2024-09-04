@@ -69,17 +69,21 @@ async def fetch_fpl_data(endpoint):
         async with session.get(f"{FPL_API_BASE}{endpoint}") as response:
             return await response.json()
         
-# Function to fetch standings data from the FPL API
 async def fetch_standings_data():
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{FPL_API_BASE}bootstrap-static/") as resp:
             data = await resp.json()
     
+    teams = data['teams']
+    
+    # Sort teams based on position
+    sorted_teams = sorted(teams, key=lambda x: x['position'])
+    
     print("Raw API data for teams:")
-    for team in data['teams']:
+    for team in sorted_teams:
         print(json.dumps(team, indent=2))
     
-    return data['teams']
+    return sorted_teams
 
 # Command to display the league table
 @bot.command()
@@ -332,22 +336,22 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{FPL_API_BASE}fixtures/") as resp:
             fixtures = await resp.json()
-        async with session.get(f"{FPL_API_BASE}bootstrap-static/") as resp:
-            bootstrap = await resp.json()  # We need to keep this to get the current gameweek
-
+    
     # Fetch current standings
     standings = await fetch_standings_data()
     
+    teams = {team['id']: {
+        'short': team['short_name'],
+        'name': team['name'],
+        'position': team['position'],
+        'points': team['points']
+    } for team in standings}
+    
+    short_to_position = {team['short_name']: team['position'] for team in standings}
+
     print("\nProcessed standings data:")
     for team in standings:
         print(f"{team['short_name']}: {team}")
-    
-    teams = {team['id']: {'short': team['short_name'], 'name': team['name'], 'position': team['position']} for team in standings}
-    short_to_position = {team['short_name']: team['position'] for team in standings}
-
-    print("Teams data:")
-    for team in standings:
-        print(f"{team['short_name']}: Position {team['position']}")
 
     current_time = datetime.now(timezone.utc)
     current_gw = next((event for event in bootstrap['events'] if event['is_current']), None)
@@ -386,13 +390,13 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
         avg_fdr = {team: sum(f['fdr'] for f in fixtures if f['fdr'] != 0) / sum(1 for f in fixtures if f['fdr'] != 0) for team, fixtures in fixture_data.items()}
         sorted_teams = sorted(fixture_data.keys(), key=lambda x: avg_fdr[x])
     elif sort_method == "table":
-        sorted_teams = sorted(fixture_data.keys(), key=lambda x: short_to_position.get(x, 20))  # Default to 20 if not found
+        sorted_teams = sorted(fixture_data.keys(), key=lambda x: short_to_position[x])
     else:  # alphabetical
         sorted_teams = sorted(fixture_data.keys())
 
     print("Sorted teams order:")
     for team in sorted_teams:
-        print(f"{team}: Position {short_to_position.get(team, 'N/A')}")
+        print(f"{team}: Position {short_to_position[team]}")
 
     # Reorder fixture_data based on the sorting
     fixture_data = {team: fixture_data[team] for team in sorted_teams}
