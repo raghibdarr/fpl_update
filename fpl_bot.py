@@ -178,9 +178,13 @@ async def player(ctx, *, player_name):
         print(f"An error occurred: {str(e)}")
         await ctx.send(f"An error occurred: {str(e)}")
 
-# Command to get fixtures
 @bot.command()
-async def fixtures(ctx, *, team_name=None):
+async def fixtures(ctx, num_gameweeks: int = 6):
+    await ctx.send("This command is under development. Please use !schedule to see the current gameweek's fixtures.")
+
+# Command to get schedule
+@bot.command()
+async def schedule(ctx, *, team_name=None):
     try:
         fixtures_data = await fetch_fpl_data("fixtures/")
         teams_data = await fetch_fpl_data("bootstrap-static/")
