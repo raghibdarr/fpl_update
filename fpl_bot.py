@@ -336,6 +336,10 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{FPL_API_BASE}fixtures/") as resp:
             fixtures = await resp.json()
+        
+        # Fetch bootstrap data
+        async with session.get(f"{FPL_API_BASE}bootstrap-static/") as resp:
+            bootstrap = await resp.json()
     
     # Fetch current standings
     standings = await fetch_standings_data()
