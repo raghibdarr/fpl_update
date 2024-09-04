@@ -12,6 +12,7 @@ from collections import defaultdict
 import aiosqlite
 from PIL import Image, ImageDraw, ImageFont
 import io
+import json
 
 # Load environment variables
 load_dotenv()
@@ -73,7 +74,12 @@ async def fetch_standings_data():
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{FPL_API_BASE}bootstrap-static/") as resp:
             data = await resp.json()
-    return sorted(data['teams'], key=lambda x: x['position'])
+    
+    print("Raw API data for teams:")
+    for team in data['teams']:
+        print(json.dumps(team, indent=2))
+    
+    return data['teams']
 
 # Command to display the league table
 @bot.command()
@@ -331,6 +337,10 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
 
     # Fetch current standings
     standings = await fetch_standings_data()
+    
+    print("\nProcessed standings data:")
+    for team in standings:
+        print(f"{team['short_name']}: {team}")
     
     teams = {team['id']: {'short': team['short_name'], 'name': team['name'], 'position': team['position']} for team in standings}
     short_to_position = {team['short_name']: team['position'] for team in standings}
