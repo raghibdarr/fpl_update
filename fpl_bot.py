@@ -355,6 +355,17 @@ async def fixtures(ctx, *, args=""):
             missing_teams = set(fixture_data.keys()) - set(team_positions.keys())
             if missing_teams:
                 print(f"Warning: The following teams are missing from the standings data: {', '.join(missing_teams)}")
+                
+                # Try to match missing teams by their full name
+                for short_name in missing_teams:
+                    full_name = team_names[short_name]
+                    matching_team = next((t for t in current_standings if format_team_name(t['team']['name']) == full_name), None)
+                    if matching_team:
+                        team_positions[short_name] = matching_team['position']
+                        team_points[short_name] = matching_team['points']
+                        print(f"Matched {short_name} to {matching_team['team']['name']}")
+                    else:
+                        print(f"Could not match {short_name} ({full_name}) to any team in the standings")
             
             for short_name in fixture_data.keys():
                 print(f"Team: {short_name}, Position: {team_positions.get(short_name, 'N/A')}, Points: {team_points.get(short_name, 'N/A')}")
@@ -434,13 +445,13 @@ def format_team_name(name):
         "Manchester United FC": "Man Utd",
         "Newcastle United FC": "Newcastle",
         "Nottingham Forest FC": "Nott'm Forest",
-        "Bournemouth": "AFC Bournemouth",
+        "AFC Bournemouth": "Bournemouth",
         "Tottenham Hotspur FC": "Spurs",
         "West Ham United FC": "West Ham",
         "Wolverhampton Wanderers FC": "Wolves",
-        "Southampton": "Southampton FC",
-        "Ipswich Town": "Ipswich Town FC",
-        "Leicester City": "Leicester City FC",
+        "Southampton FC": "Southampton",
+        "Leicester City FC": "Leicester",
+        "Ipswich Town FC": "Ipswich",
     }
     return name_mapping.get(name, name)
 
