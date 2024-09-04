@@ -244,10 +244,11 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names):
     actual_gameweeks = min(num_gameweeks, 38 - start_gw + 1)
     
     cell_width, cell_height = 100, 30
-    team_column_width = 150  # Width for full team names
+    team_column_width = 120  # Reduced width for team names
     spacing = 20  # Spacing between team column and fixtures
-    width = team_column_width + spacing + (cell_width * actual_gameweeks)
-    height = 50 + (cell_height * len(fixture_data))
+    padding = 20  # Padding around the entire grid
+    width = padding * 2 + team_column_width + spacing + (cell_width * actual_gameweeks)
+    height = padding * 2 + 50 + (cell_height * len(fixture_data))
     image = Image.new('RGB', (width, height), color='white')
     draw = ImageDraw.Draw(image)
     
@@ -259,18 +260,18 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names):
     # Draw headers
     for i in range(actual_gameweeks):
         gw_number = start_gw + i
-        x = team_column_width + spacing + i*cell_width
-        draw.text((x + cell_width/2, 25), f"GW{gw_number}", font=header_font, fill='black', anchor="mm")
+        x = padding + team_column_width + spacing + i*cell_width
+        draw.text((x + cell_width/2, padding + 25), f"GW{gw_number}", font=header_font, fill='black', anchor="mm")
     
     # Draw team names and fixtures
     for i, (team_short, fixtures) in enumerate(fixture_data.items()):
-        y = 50 + i*cell_height
+        y = padding + 50 + i*cell_height
         team_full = team_names[team_short]
         # Draw rectangle for team name
-        draw.rectangle([0, y, team_column_width, y + cell_height], outline='black')
-        draw.text((10, y + cell_height/2), team_full, font=bold_font, fill='black', anchor="lm")
+        draw.rectangle([padding, y, padding + team_column_width, y + cell_height], outline='black')
+        draw.text((padding + 5, y + cell_height/2), team_full, font=bold_font, fill='black', anchor="lm")
         for j, fixture in enumerate(fixtures[:actual_gameweeks]):
-            x = team_column_width + spacing + j*cell_width
+            x = padding + team_column_width + spacing + j*cell_width
             color = get_fixture_color(fixture)
             text_color = get_text_color(fixture)
             draw.rectangle([x, y, x + cell_width, y + cell_height], fill=color, outline='black')
@@ -290,16 +291,16 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names):
     
     # Draw gridlines
     for i in range(actual_gameweeks + 1):
-        x = team_column_width + spacing + i*cell_width
-        draw.line([(x, 50), (x, height)], fill='black', width=1)
+        x = padding + team_column_width + spacing + i*cell_width
+        draw.line([(x, padding + 50), (x, height - padding)], fill='black', width=1)
     
     for i in range(len(fixture_data) + 1):
-        y = 50 + i*cell_height
-        draw.line([(0, y), (team_column_width, y)], fill='black', width=1)  # Team names column
-        draw.line([(team_column_width + spacing, y), (width, y)], fill='black', width=1)  # Fixtures area
+        y = padding + 50 + i*cell_height
+        draw.line([(padding, y), (padding + team_column_width, y)], fill='black', width=1)  # Team names column
+        draw.line([(padding + team_column_width + spacing, y), (width - padding, y)], fill='black', width=1)  # Fixtures area
     
     # Draw vertical line after team names
-    draw.line([(team_column_width, 50), (team_column_width, height)], fill='black', width=1)
+    draw.line([(padding + team_column_width, padding + 50), (padding + team_column_width, height - padding)], fill='black', width=1)
     
     return image
     
