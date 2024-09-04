@@ -189,15 +189,15 @@ async def fixtures(ctx, num_gameweeks: int = 6):
     
     await ctx.send("Generating fixture grid... This may take a moment.")
     
-    fixture_data, start_gw, actual_gameweeks = await fetch_fixture_data(num_gameweeks)
-    image = create_fixture_grid(fixture_data, actual_gameweeks, start_gw)
+    fixture_data, start_gw, actual_gameweeks, team_names = await fetch_fixture_data(num_gameweeks)
+    image = create_fixture_grid(fixture_data, actual_gameweeks, start_gw, team_names)
     
     img_byte_arr = io.BytesIO()
     image.save(img_byte_arr, format='PNG')
     img_byte_arr.seek(0)
     
     await ctx.send(file=discord.File(fp=img_byte_arr, filename='fixtures.png'))
-
+    
 # Function to fetch fixture data
 async def fetch_fixture_data(num_gameweeks):
     async with aiohttp.ClientSession() as session:
@@ -206,7 +206,7 @@ async def fetch_fixture_data(num_gameweeks):
         async with session.get(f"{FPL_API_BASE}bootstrap-static/") as resp:
             bootstrap = await resp.json()
 
-    teams = {team['id']: team['short_name'] for team in bootstrap['teams']}
+    teams = {team['id']: {'short': team['short_name'], 'name': team['name']} for team in bootstrap['teams']}
     
     # Find the current gameweek and check if it has finished
     current_time = datetime.now(timezone.utc)
@@ -226,25 +226,26 @@ async def fetch_fixture_data(num_gameweeks):
     # Ensure we don't go beyond GW38
     actual_gameweeks = min(num_gameweeks, 38 - start_gw + 1)
 
-    fixture_data = {team: [{'opponent': '', 'fdr': 0}] * actual_gameweeks for team in teams.values()}
+    fixture_data = {team['short']: [{'opponent': '', 'fdr': 0}] * actual_gameweeks for team in teams.values()}
 
     for fixture in fixtures:
         if start_gw <= fixture['event'] < start_gw + actual_gameweeks:
             gw_index = fixture['event'] - start_gw
-            home_team = teams[fixture['team_h']]
-            away_team = teams[fixture['team_a']]
+            home_team = teams[fixture['team_h']]['short']
+            away_team = teams[fixture['team_a']]['short']
             fixture_data[home_team][gw_index] = {'opponent': away_team.upper(), 'fdr': fixture['team_h_difficulty']}
             fixture_data[away_team][gw_index] = {'opponent': home_team.lower(), 'fdr': fixture['team_a_difficulty']}
 
-    return fixture_data, start_gw, actual_gameweeks
+    return fixture_data, start_gw, actual_gameweeks, {v['short']: v['name'] for v in teams.values()}
     
 # Function to create fixture grid
-def create_fixture_grid(fixture_data, num_gameweeks, start_gw):
+def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names):
     # Calculate the actual number of gameweeks to display
     actual_gameweeks = min(num_gameweeks, 38 - start_gw + 1)
     
     cell_width, cell_height = 100, 30
-    width = 100 + (cell_width * actual_gameweeks)
+    team_column_width = 150  # Increased width for full team names
+    width = team_column_width + (cell_width * actual_gameweeks)
     height = 50 + (cell_height * len(fixture_data))
     image = Image.new('RGB', (width, height), color='white')
     draw = ImageDraw.Draw(image)
@@ -258,14 +259,15 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw):
     draw.text((10, 25), "Team", font=header_font, fill='black', anchor="lm")
     for i in range(actual_gameweeks):
         gw_number = start_gw + i
-        draw.text((150 + i*cell_width, 25), f"GW{gw_number}", font=header_font, fill='black', anchor="mm")
+        draw.text((team_column_width + 50 + i*cell_width, 25), f"GW{gw_number}", font=header_font, fill='black', anchor="mm")
     
     # Draw team names and fixtures
-    for i, (team, fixtures) in enumerate(fixture_data.items()):
+    for i, (team_short, fixtures) in enumerate(fixture_data.items()):
         y = 50 + i*cell_height
-        draw.text((50, y + cell_height/2), team, font=font, fill='black', anchor="mm")
+        team_full = team_names[team_short]
+        draw.text((10, y + cell_height/2), team_full, font=bold_font, fill='black', anchor="lm")
         for j, fixture in enumerate(fixtures[:actual_gameweeks]):
-            x = 100 + j*cell_width
+            x = team_column_width + j*cell_width
             color = get_fixture_color(fixture)
             text_color = get_text_color(fixture)
             draw.rectangle([x, y, x + cell_width, y + cell_height], fill=color)
