@@ -50,8 +50,8 @@ team_aliases = {
     "Leicester": ["leicester", "leicester city", "lei", "foxes", "the foxes", "lcfc"],
     "Liverpool": ["liverpool", "liv", "liverpool fc", "pool", "the reds", "reds", "lfc"],
     "Man City": ["manchester city", "man city", "city", "mci", "cityzens", "mcfc", "the citizens", "the blues", "mancity", "mcfc"],
-    "Man Utd": ["manchester united", "man united", "united", "mun", 'utd', 'man utd', "mufc", "mu", "red devils", "reddevils", "the red devils", "the reddevils"],
-    "Newcastle": ["newcastle", "newcastle united", "new", 'nufc', 'newcastle', "magpies", "the magpies", "nufc", "newcastle utd", "newcastle united fc", "newcastle utd fc", "the magpies fc", "the magpies fc"],
+    "Man Utd": ["manchester united", "man united", "united", "mun", "utd", "man utd", "mufc", "mu", "red devils", "reddevils", "the red devils", "the reddevils"],
+    "Newcastle": ["newcastle", "newcastle united", "new", "nufc", "newcastle", "magpies", "the magpies", "nufc", "newcastle utd", "newcastle united fc", "newcastle utd fc", "the magpies fc", "the magpies fc"],
     "Nott'm Forest": ["nottingham forest", "nottm forest", "forest", "nfo", "nottingham", "trouts", "forest fc", "nottingham forest fc", "nffc"],
     "Southampton": ["southampton", "saints", "sou", "southampton fc", "the saints", "saints fc", "sfc"],
     "Spurs": ["tottenham", "tottenham hotspur", "spurs", "tot", "thfc", "hotspurs", "spurs fc", "the spurs", "lilywhites", "the lilywhites", "spurs"],
@@ -272,12 +272,15 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=[]):
     print(f"Selected teams: {selected_teams}")
     print(f"Number of teams before filtering: {len(fixture_data)}")
 
+    # Create a mapping from short names to full names
+    short_to_full = {alias.lower(): full_name for full_name, aliases in team_aliases.items() for alias in aliases}
+
     # Filter teams if selected_teams is not empty
     if selected_teams:
         filtered_fixture_data = {}
         for team_short, fixtures in fixture_data.items():
             print(f"Checking team: {team_short}")
-            team_full_name = next((name for name, aliases in team_aliases.items() if team_short in aliases), None)
+            team_full_name = short_to_full.get(team_short.lower())
             print(f"Full name for {team_short}: {team_full_name}")
             if team_full_name:
                 if any(selected_team.lower() in [alias.lower() for alias in team_aliases[team_full_name]] 
