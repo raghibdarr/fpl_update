@@ -75,6 +75,7 @@ async def fetch_standings_data():
             data = await resp.json()
     return data['teams']
 
+# Command to display the league table
 @bot.command()
 async def table(ctx):
     try:
@@ -83,20 +84,79 @@ async def table(ctx):
         # Sort teams by position
         sorted_teams = sorted(standings_data, key=lambda x: x['position'])
         
-        # Create the table message
-        table_message = "```\n"
-        table_message += f"{'Pos':^4}{'Team':<20}{'Played':^8}{'Won':^6}{'Drawn':^6}{'Lost':^6}{'GF':^6}{'GA':^6}{'GD':^6}{'Points':^8}\n"
-        table_message += "-" * 76 + "\n"
+        # Create the table image
+        image = create_table_image(sorted_teams)
         
-        for team in sorted_teams:
-            table_message += f"{team['position']:^4}{team['name']:<20}{team['played']:^8}{team['win']:^6}{team['draw']:^6}"
-            table_message += f"{team['loss']:^6}{team['goals_for']:^6}{team['goals_against']:^6}{team['goal_difference']:^6}{team['points']:^8}\n"
+        # Convert image to bytes
+        img_byte_arr = io.BytesIO()
+        image.save(img_byte_arr, format='PNG')
+        img_byte_arr.seek(0)
         
-        table_message += "```"
-        
-        await ctx.send(table_message)
+        # Send the image
+        await ctx.send(file=discord.File(fp=img_byte_arr, filename='table.png'))
     except Exception as e:
         await ctx.send(f"An error occurred: {str(e)}")
+        print(f"Full error: {e}")  # This will print the full error to your console
+
+# Function to create the table image
+def create_table_image(teams):
+    # Define image properties
+    width = 1000
+    height = 50 + len(teams) * 30
+    padding = 10
+    font = ImageFont.truetype("arial.ttf", 16)
+    header_font = ImageFont.truetype("arialbd.ttf", 16)
+
+    # Create image and drawing context
+    image = Image.new('RGB', (width, height), color='white')
+    draw = ImageDraw.Draw(image)
+
+    # Define column widths
+    col_widths = [50, 200, 50, 50, 50, 50, 50, 50, 50, 50]
+    
+    # Draw headers
+    headers = ["Pos", "Team", "Played", "Won", "Drawn", "Lost", "GF", "GA", "GD", "Points"]
+    x = padding
+    for header, col_width in zip(headers, col_widths):
+        draw.text((x, padding), header, font=header_font, fill='black')
+        x += col_width
+
+    # Draw team data
+    for i, team in enumerate(teams):
+        y = 40 + i * 30
+        x = padding
+        row = [
+            str(team['position']),
+            team['name'],
+            str(team['played']),
+            str(team['win']),
+            str(team['draw']),
+            str(team['loss']),
+            str(team.get('goals_for', 'N/A')),
+            str(team.get('goals_against', 'N/A')),
+            str(team.get('goal_difference', 'N/A')),
+            str(team['points'])
+        ]
+        for text, col_width in zip(row, col_widths):
+            draw.text((x, y), text, font=font, fill='black')
+            x += col_width
+
+        # Draw alternating row backgrounds
+        if i % 2 == 0:
+            draw.rectangle([0, y-5, width, y+25], fill='#f0f0f0')
+
+    # Draw horizontal lines
+    for i in range(len(teams) + 1):
+        y = 35 + i * 30
+        draw.line([(0, y), (width, y)], fill='#d0d0d0')
+
+    # Draw vertical lines
+    x = 0
+    for col_width in col_widths:
+        x += col_width
+        draw.line([(x, 0), (x, height)], fill='#d0d0d0')
+
+    return image
 
 # Database setup
 async def setup_database():
