@@ -379,6 +379,7 @@ async def fixtures(ctx, *, args=""):
         await ctx.send(file=discord.File(fp=img_byte_arr, filename='fixtures.png'))
     except Exception as e:
         await ctx.send(f"An error occurred: {str(e)}")
+        print(f"Full error: {e}")  # This will print the full error to your console
 
 # Function to load or update the PL teams data
 def load_pl_teams():
@@ -471,33 +472,22 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
     # Fetch current standings from Football-Data.org API
     current_standings = fetch_current_standings()
 
-    # Print out the standings data for debugging
-    print("Current standings data:")
-    for team in current_standings:
-        print(f"{team['team']['name']} (TLA: {team['team']['tla']}) - Position: {team['position']}")
-
     # Create a mapping of FPL team names to Football-Data.org team names
     fpl_to_football_data = {}
     for fpl_team in bootstrap['teams']:
-        # First, try to match by TLA (short name)
-        tla_match = next((st for st in current_standings if st['team']['tla'] == fpl_team['short_name']), None)
-        if tla_match:
-            fpl_to_football_data[fpl_team['name']] = tla_match['team']['name']
+        best_match = None
+        highest_ratio = 0
+        for standings_team in current_standings:
+            ratio = fuzz.partial_ratio(fpl_team['name'].lower(), standings_team['team']['name'].lower())
+            if ratio > highest_ratio:
+                highest_ratio = ratio
+                best_match = standings_team['team']['name']
+        
+        if best_match:
+            fpl_to_football_data[fpl_team['name']] = best_match
         else:
-            # If no TLA match, use fuzzy matching
-            best_match = None
-            highest_ratio = 0
-            for standings_team in current_standings:
-                ratio = fuzz.partial_ratio(fpl_team['name'].lower(), standings_team['team']['name'].lower())
-                if ratio > highest_ratio:
-                    highest_ratio = ratio
-                    best_match = standings_team['team']['name']
-            
-            if best_match:
-                fpl_to_football_data[fpl_team['name']] = best_match
-            else:
-                print(f"Warning: No match found for {fpl_team['name']}")
-                fpl_to_football_data[fpl_team['name']] = fpl_team['name']
+            print(f"Warning: No match found for {fpl_team['name']}")
+            fpl_to_football_data[fpl_team['name']] = fpl_team['name']
 
     teams = {team['id']: {
         'short': team['short_name'],
@@ -505,10 +495,23 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
         'position': next((t['position'] for t in current_standings if t['team']['name'] == fpl_to_football_data[team['name']]), 0)
     } for team in bootstrap['teams']}
 
-    # Print out the mappings and positions for debugging
-    print("Team mappings and positions:")
-    for team in teams.values():
-        print(f"{team['short']}: {team['name']} -> {fpl_to_football_data[team['name']]} (Position: {team['position']})")
+    # Filter teams if selected_teams is not empty
+    if selected_teams:
+        selected_team_ids = set()
+        for team in selected_teams:
+            # Use fuzzy matching to find the best match
+            best_match, score = process.extractOne(team, team_aliases.keys())
+            if score > 80:  # You can adjust this threshold
+                matched_team = next((t for t in teams.values() if t['name'] == best_match), None)
+                if matched_team:
+                    selected_team_ids.add(next(id for id, t in teams.items() if t['name'] == matched_team['name']))
+        
+        if selected_team_ids:  # Only filter if we found matches
+            filtered_teams = {id: team for id, team in teams.items() if id in selected_team_ids}
+        else:
+            filtered_teams = teams  # If no matches, keep all teams (preserves existing behavior)
+    else:
+        filtered_teams = teams
 
     current_time = datetime.now(timezone.utc)
     current_gw = next((event for event in bootstrap['events'] if event['is_current']), None)
@@ -524,30 +527,27 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
 
     actual_gameweeks = min(num_gameweeks, 38 - start_gw + 1)
 
-    fixture_data = {team['short']: [{'opponent': '', 'fdr': 0}] * actual_gameweeks for team in teams.values()}
+    fixture_data = {team['short']: [{'opponent': '', 'fdr': 0}] * actual_gameweeks for team in filtered_teams.values()}
 
     for fixture in fixtures:
         if start_gw <= fixture['event'] < start_gw + actual_gameweeks:
             gw_index = fixture['event'] - start_gw
             home_team = teams[fixture['team_h']]['short']
             away_team = teams[fixture['team_a']]['short']
-            fixture_data[home_team][gw_index] = {'opponent': away_team.upper(), 'fdr': fixture['team_h_difficulty']}
-            fixture_data[away_team][gw_index] = {'opponent': home_team.lower(), 'fdr': fixture['team_a_difficulty']}
+            
+            if home_team in fixture_data:
+                fixture_data[home_team][gw_index] = {'opponent': away_team.upper(), 'fdr': fixture['team_h_difficulty']}
+            if away_team in fixture_data:
+                fixture_data[away_team][gw_index] = {'opponent': home_team.lower(), 'fdr': fixture['team_a_difficulty']}
 
     # Sort teams based on the specified method
     if sort_method == "fdr":
         avg_fdr = {team: sum(f['fdr'] for f in fixtures if f['fdr'] != 0) / sum(1 for f in fixtures if f['fdr'] != 0) for team, fixtures in fixture_data.items()}
         sorted_teams = sorted(fixture_data.keys(), key=lambda x: avg_fdr[x])
     elif sort_method == "table":
-        sorted_teams = sorted(teams.values(), key=lambda x: x['position'])
-        sorted_teams = [team['short'] for team in sorted_teams]
+        sorted_teams = sorted(fixture_data.keys(), key=lambda x: next((team['position'] for team in teams.values() if team['short'] == x), 0))
     else:  # alphabetical
         sorted_teams = sorted(fixture_data.keys())
-
-    print("Sorted teams order:")
-    for team in sorted_teams:
-        full_name = next(name for name, data in teams.items() if data['short'] == team)
-        print(f"{team}: Position {teams[full_name]['position']}")
 
     # Reorder fixture_data based on the sorting
     fixture_data = {team: fixture_data[team] for team in sorted_teams}
@@ -558,14 +558,14 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
         if start_gw <= event['id'] < start_gw + actual_gameweeks:
             gw_dates[event['id']] = datetime.strptime(event['deadline_time'], "%Y-%m-%dT%H:%M:%SZ").strftime("%d/%m")
 
-    return fixture_data, start_gw, actual_gameweeks, {v['short']: v['name'] for v in teams.values()}, gw_dates
+    return fixture_data, start_gw, actual_gameweeks, {v['short']: v['name'] for v in filtered_teams.values()}, gw_dates
 
 # Function to create fixture grid
 def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names, gw_dates, sort_method, team_positions, team_points):
     cell_width, cell_height = 100, 30
     team_column_width = 120
-    position_column_width = 40
-    points_column_width = 40
+    position_column_width = 40 if sort_method == "table" else 0
+    points_column_width = 40 if sort_method == "table" else 0
     spacing = 10
     padding = 20
     header_height_small = 25  # Height for Pos, Club, Pts headers
@@ -582,15 +582,17 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names, gw_da
     header_font = ImageFont.truetype("arialbd.ttf", 16)
     date_font = ImageFont.truetype("arial.ttf", 14)
     
-    # Draw headers for position, club, and points columns
-    draw.rectangle([padding, padding + header_height_large - header_height_small, padding + position_column_width, padding + header_height_large], outline='black')
-    draw.text((padding + position_column_width/2, padding + header_height_large - 5), "Pos", font=header_font, fill='black', anchor="mb")
+    # Draw headers for position, club, and points columns only if sort_method is "table"
+    if sort_method == "table":
+        draw.rectangle([padding, padding + header_height_large - header_height_small, padding + position_column_width, padding + header_height_large], outline='black')
+        draw.text((padding + position_column_width/2, padding + header_height_large - 5), "Pos", font=header_font, fill='black', anchor="mb")
+        
+        draw.rectangle([padding + position_column_width + team_column_width, padding + header_height_large - header_height_small, padding + position_column_width + team_column_width + points_column_width, padding + header_height_large], outline='black')
+        draw.text((padding + position_column_width + team_column_width + points_column_width/2, padding + header_height_large - 5), "Pts", font=header_font, fill='black', anchor="mb")
     
+    # Draw club header
     draw.rectangle([padding + position_column_width, padding + header_height_large - header_height_small, padding + position_column_width + team_column_width, padding + header_height_large], outline='black')
     draw.text((padding + position_column_width + 5, padding + header_height_large - 5), "Club", font=header_font, fill='black', anchor="lb")
-    
-    draw.rectangle([padding + position_column_width + team_column_width, padding + header_height_large - header_height_small, padding + position_column_width + team_column_width + points_column_width, padding + header_height_large], outline='black')
-    draw.text((padding + position_column_width + team_column_width + points_column_width/2, padding + header_height_large - 5), "Pts", font=header_font, fill='black', anchor="mb")
     
     # Draw headers and dates for gameweeks
     for i in range(num_gameweeks):
@@ -604,17 +606,19 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names, gw_da
         y = padding + header_height_large + gap_height + i*cell_height
         team_full = team_names[team_short]
         
-        # Draw position (in bold)
-        draw.rectangle([padding, y, padding + position_column_width, y + cell_height], outline='black')
-        draw.text((padding + position_column_width/2, y + cell_height/2), str(team_positions[team_short]), font=bold_font, fill='black', anchor="mm")
+        # Draw position (in bold) only if sort_method is "table"
+        if sort_method == "table":
+            draw.rectangle([padding, y, padding + position_column_width, y + cell_height], outline='black')
+            draw.text((padding + position_column_width/2, y + cell_height/2), str(team_positions.get(team_short, '')), font=bold_font, fill='black', anchor="mm")
         
         # Draw team name (in bold)
         draw.rectangle([padding + position_column_width, y, padding + position_column_width + team_column_width, y + cell_height], outline='black')
         draw.text((padding + position_column_width + 5, y + cell_height/2), team_full, font=bold_font, fill='black', anchor="lm")
         
-        # Draw points (in bold)
-        draw.rectangle([padding + position_column_width + team_column_width, y, padding + position_column_width + team_column_width + points_column_width, y + cell_height], outline='black')
-        draw.text((padding + position_column_width + team_column_width + points_column_width/2, y + cell_height/2), str(team_points[team_short]), font=bold_font, fill='black', anchor="mm")
+        # Draw points (in bold) only if sort_method is "table"
+        if sort_method == "table":
+            draw.rectangle([padding + position_column_width + team_column_width, y, padding + position_column_width + team_column_width + points_column_width, y + cell_height], outline='black')
+            draw.text((padding + position_column_width + team_column_width + points_column_width/2, y + cell_height/2), str(team_points.get(team_short, '')), font=bold_font, fill='black', anchor="mm")
         
         for j, fixture in enumerate(fixtures):
             x = padding + position_column_width + team_column_width + points_column_width + spacing + j*cell_width
