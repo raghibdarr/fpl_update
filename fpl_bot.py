@@ -495,16 +495,35 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
         'position': next((t['position'] for t in current_standings if t['team']['name'] == fpl_to_football_data[team['name']]), 0)
     } for team in bootstrap['teams']}
 
+    # Create a reverse mapping of aliases to team names
+    alias_to_team = {}
+    for team, aliases in team_aliases.items():
+        for alias in aliases:
+            alias_to_team[alias.lower()] = team
+
     # Filter teams if selected_teams is not empty
     if selected_teams:
         selected_team_ids = set()
         for team in selected_teams:
-            # Use fuzzy matching to find the best match
-            best_match, score = process.extractOne(team, team_aliases.keys())
+            # Debug: Print all matches and scores
+            all_matches = process.extract(team.lower(), alias_to_team.keys(), limit=5)
+            print(f"Fuzzy matches for '{team}':")
+            for match, score in all_matches:
+                print(f"  {match}: {score}")
+
+            best_match, score = process.extractOne(team.lower(), alias_to_team.keys())
+            print(f"Best match for '{team}': {best_match} (score: {score})")
+
             if score > 80:  # You can adjust this threshold
-                matched_team = next((t for t in teams.values() if t['name'] == best_match), None)
+                matched_team_name = alias_to_team[best_match]
+                matched_team = next((t for t in teams.values() if t['name'] == matched_team_name), None)
                 if matched_team:
                     selected_team_ids.add(next(id for id, t in teams.items() if t['name'] == matched_team['name']))
+                    print(f"Added team: {matched_team['name']}")
+                else:
+                    print(f"Matched team not found in teams dictionary: {matched_team_name}")
+            else:
+                print(f"No match found for '{team}' (best score: {score})")
         
         if selected_team_ids:  # Only filter if we found matches
             filtered_teams = {id: team for id, team in teams.items() if id in selected_team_ids}
