@@ -475,7 +475,59 @@ def format_team_name(name):
     }
     return name_mapping.get(name, name)
 
-# Function to fetch fixture data
+# Function to fetch cup fixtures
+async def fetch_cup_fixtures(competition_code='CL', days_range=30):
+    url = f"http://api.football-data.org/v4/competitions/{competition_code}/matches"
+    headers = {"X-Auth-Token": FOOTBALL_DATA_API_KEY}
+    
+    # Calculate date range
+    today = datetime.now().date()
+    from_date = today - timedelta(days=days_range//2)
+    to_date = today + timedelta(days=days_range//2)
+    
+    params = {
+        "dateFrom": from_date.isoformat(),
+        "dateTo": to_date.isoformat(),
+        "status": "SCHEDULED"
+    }
+    
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code != 200:
+        print(f"Error fetching {competition_code} fixtures: {response.status_code}")
+        return []
+    
+    data = response.json()
+    
+    fixtures = []
+    for match in data['matches']:
+        fixtures.append({
+            'date': match['utcDate'],
+            'home_team': match['homeTeam']['shortName'],
+            'away_team': match['awayTeam']['shortName'],
+            'competition': competition_code
+        })
+    
+    print(f"Fetched {len(fixtures)} {competition_code} fixtures")
+    print("Sample fixture:", fixtures[0] if fixtures else "No fixtures")
+    
+    return fixtures
+
+# Command to test cup fixtures
+@bot.command()
+async def test_cup_fixtures(ctx, competition_code='CL'):
+    fixtures = await fetch_cup_fixtures(competition_code)
+    if fixtures:
+        response = f"Fetched {len(fixtures)} fixtures for {competition_code}:\n"
+        for fixture in fixtures[:20]:  # Show first 5 fixtures
+            response += f"{fixture['date']}: {fixture['home_team']} vs {fixture['away_team']}\n"
+        #if len(fixtures) > 5:
+        #    response += "... (more fixtures available)"
+    else:
+        response = f"No fixtures found for {competition_code}"
+    
+    await ctx.send(response)
+
+# Function to fetch fixture data (premier league)
 async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="alphabetical", start_gw='current', end_gw=38):
     # Fetch FPL data
     async with aiohttp.ClientSession() as session:
