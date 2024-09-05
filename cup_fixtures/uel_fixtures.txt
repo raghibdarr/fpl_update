@@ -1,0 +1,161 @@
+Matchday 1
+Home	Score	Away
+AZ Netherlands	25 Sep	Sweden IF Elfsborg
+Bodø/Glimt Norway	25 Sep	Portugal Porto
+Dynamo Kyiv Ukraine	25 Sep	Italy Lazio
+Midtjylland Denmark	25 Sep	Germany TSG Hoffenheim
+Galatasaray Turkey	25 Sep	Greece PAOK
+Manchester United England	25 Sep	Netherlands Twente
+Nice France	25 Sep	Spain Real Sociedad
+Ludogorets Razgrad Bulgaria	25 Sep	Czech Republic Slavia Prague
+Anderlecht Belgium	25 Sep	Hungary Ferencváros
+Fenerbahçe Turkey	26 Sep	Belgium Union Saint-Gilloise
+Malmö FF Sweden	26 Sep	Scotland Rangers
+Ajax Netherlands	26 Sep	Turkey Beşiktaş
+Roma Italy	26 Sep	Spain Athletic Bilbao
+Eintracht Frankfurt Germany	26 Sep	Czech Republic Viktoria Plzeň
+FCSB Romania	26 Sep	Latvia RFS
+Lyon France	26 Sep	Greece Olympiacos
+Braga Portugal	26 Sep	Israel Maccabi Tel Aviv
+Tottenham Hotspur England	26 Sep	Azerbaijan Qarabağ
+Matchday 2
+Home	Score	Away
+RFS Latvia	3 Oct	Turkey Galatasaray
+Ferencváros Hungary	3 Oct	England Tottenham Hotspur
+Maccabi Tel Aviv Israel	3 Oct	Denmark Midtjylland
+Olympiacos Greece	3 Oct	Portugal Braga
+Qarabağ Azerbaijan	3 Oct	Sweden Malmö FF
+Real Sociedad Spain	3 Oct	Belgium Anderlecht
+Lazio Italy	3 Oct	France Nice
+Slavia Prague Czech Republic	3 Oct	Netherlands Ajax
+TSG Hoffenheim Germany	3 Oct	Ukraine Dynamo Kyiv
+Athletic Bilbao Spain	3 Oct	Netherlands AZ
+Beşiktaş Turkey	3 Oct	Germany Eintracht Frankfurt
+Porto Portugal	3 Oct	England Manchester United
+Twente Netherlands	3 Oct	Turkey Fenerbahçe
+Viktoria Plzeň Czech Republic	3 Oct	Bulgaria Ludogorets Razgrad
+IF Elfsborg Sweden	3 Oct	Italy Roma
+PAOK Greece	3 Oct	Romania FCSB
+Union Saint-Gilloise Belgium	3 Oct	Norway Bodø/Glimt
+Rangers Scotland	3 Oct	France Lyon
+Matchday 3
+Home	Score	Away
+Galatasaray Turkey	23 Oct	Sweden IF Elfsborg
+Braga Portugal	23 Oct	Norway Bodø/Glimt
+Roma Italy	24 Oct	Ukraine Dynamo Kyiv
+Eintracht Frankfurt Germany	24 Oct	Latvia RFS
+Midtjylland Denmark	24 Oct	Belgium Union Saint-Gilloise
+Ferencváros Hungary	24 Oct	France Nice
+Maccabi Tel Aviv Israel	24 Oct	Spain Real Sociedad
+PAOK Greece	24 Oct	Czech Republic Viktoria Plzeň
+Qarabağ Azerbaijan	24 Oct	Netherlands Ajax
+Athletic Bilbao Spain	24 Oct	Czech Republic Slavia Prague
+Porto Portugal	24 Oct	Germany TSG Hoffenheim
+Twente Netherlands	24 Oct	Italy Lazio
+Fenerbahçe Turkey	24 Oct	England Manchester United
+Malmö FF Sweden	24 Oct	Greece Olympiacos
+Lyon France	24 Oct	Turkey Beşiktaş
+Rangers Scotland	24 Oct	Romania FCSB
+Anderlecht Belgium	24 Oct	Bulgaria Ludogorets Razgrad
+Tottenham Hotspur England	24 Oct	Netherlands AZ
+Matchday 4
+Home	Score	Away
+Beşiktaş Turkey	6 Nov	Sweden Malmö FF
+Eintracht Frankfurt Germany	7 Nov	Czech Republic Slavia Prague
+Bodø/Glimt Norway	7 Nov	Azerbaijan Qarabağ
+FCSB Romania	7 Nov	Denmark Midtjylland
+Galatasaray Turkey	7 Nov	England Tottenham Hotspur
+IF Elfsborg Sweden	7 Nov	Portugal Braga
+Nice France	7 Nov	Netherlands Twente
+Olympiacos Greece	7 Nov	Scotland Rangers
+Ludogorets Razgrad Bulgaria	7 Nov	Spain Athletic Bilbao
+Union Saint-Gilloise Belgium	7 Nov	Italy Roma
+Ajax Netherlands	7 Nov	Israel Maccabi Tel Aviv
+AZ Netherlands	7 Nov	Turkey Fenerbahçe
+Dynamo Kyiv Ukraine	7 Nov	Hungary Ferencváros
+RFS Latvia	7 Nov	Belgium Anderlecht
+Viktoria Plzeň Czech Republic	7 Nov	Spain Real Sociedad
+Manchester United England	7 Nov	Greece PAOK
+Lazio Italy	7 Nov	Portugal Porto
+TSG Hoffenheim Germany	7 Nov	France Lyon
+Matchday 5
+Home	Score	Away
+Athletic Bilbao Spain	28 Nov	Sweden IF Elfsborg
+AZ Netherlands	28 Nov	Turkey Galatasaray
+Beşiktaş Turkey	28 Nov	Israel Maccabi Tel Aviv
+Dynamo Kyiv Ukraine	28 Nov	Czech Republic Viktoria Plzeň
+RFS Latvia	28 Nov	Greece PAOK
+Qarabağ Azerbaijan	28 Nov	France Lyon
+Anderlecht Belgium	28 Nov	Portugal Porto
+Lazio Italy	28 Nov	Bulgaria Ludogorets Razgrad
+Midtjylland Denmark	28 Nov	Germany Eintracht Frankfurt
+Twente Netherlands	28 Nov	Belgium Union Saint-Gilloise
+Ferencváros Hungary	28 Nov	Sweden Malmö FF
+FCSB Romania	28 Nov	Greece Olympiacos
+Manchester United England	28 Nov	Norway Bodø/Glimt
+Nice France	28 Nov	Scotland Rangers
+Real Sociedad Spain	28 Nov	Netherlands Ajax
+Braga Portugal	28 Nov	Germany TSG Hoffenheim
+Slavia Prague Czech Republic	28 Nov	Turkey Fenerbahçe
+Tottenham Hotspur England	28 Nov	Italy Roma
+Matchday 6
+Home	Score	Away
+Fenerbahçe Turkey	11 Dec	Spain Athletic Bilbao
+Roma Italy	12 Dec	Portugal Braga
+Viktoria Plzeň Czech Republic	12 Dec	England Manchester United
+Malmö FF Sweden	12 Dec	Turkey Galatasaray
+Olympiacos Greece	12 Dec	Netherlands Twente
+PAOK Greece	12 Dec	Hungary Ferencváros
+Ludogorets Razgrad Bulgaria	12 Dec	Netherlands AZ
+Union Saint-Gilloise Belgium	12 Dec	France Nice
+TSG Hoffenheim Germany	12 Dec	Romania FCSB
+Ajax Netherlands	12 Dec	Italy Lazio
+Porto Portugal	12 Dec	Denmark Midtjylland
+Bodø/Glimt Norway	12 Dec	Turkey Beşiktaş
+IF Elfsborg Sweden	12 Dec	Azerbaijan Qarabağ
+Maccabi Tel Aviv Israel	12 Dec	Latvia RFS
+Lyon France	12 Dec	Germany Eintracht Frankfurt
+Rangers Scotland	12 Dec	England Tottenham Hotspur
+Real Sociedad Spain	12 Dec	Ukraine Dynamo Kyiv
+Slavia Prague Czech Republic	12 Dec	Belgium Anderlecht
+Matchday 7
+Home	Score	Away
+Galatasaray Turkey	21 Jan	Ukraine Dynamo Kyiv
+Beşiktaş Turkey	22 Jan	Spain Athletic Bilbao
+AZ Netherlands	23 Jan	Italy Roma
+Porto Portugal	23 Jan	Greece Olympiacos
+Viktoria Plzeň Czech Republic	23 Jan	Belgium Anderlecht
+Fenerbahçe Turkey	23 Jan	France Lyon
+Bodø/Glimt Norway	23 Jan	Israel Maccabi Tel Aviv
+Malmö FF Sweden	23 Jan	Netherlands Twente
+Qarabağ Azerbaijan	23 Jan	Romania FCSB
+TSG Hoffenheim Germany	23 Jan	England Tottenham Hotspur
+Eintracht Frankfurt Germany	23 Jan	Hungary Ferencváros
+RFS Latvia	23 Jan	Netherlands Ajax
+IF Elfsborg Sweden	23 Jan	France Nice
+Manchester United England	23 Jan	Scotland Rangers
+PAOK Greece	23 Jan	Czech Republic Slavia Prague
+Ludogorets Razgrad Bulgaria	23 Jan	Denmark Midtjylland
+Union Saint-Gilloise Belgium	23 Jan	Portugal Braga
+Lazio Italy	23 Jan	Spain Real Sociedad
+Matchday 8
+Home	Score	Away
+Ajax Netherlands	30 Jan	Turkey Galatasaray
+Roma Italy	30 Jan	Germany Eintracht Frankfurt
+Athletic Bilbao Spain	30 Jan	Czech Republic Viktoria Plzeň
+Dynamo Kyiv Ukraine	30 Jan	Latvia RFS
+Midtjylland Denmark	30 Jan	Turkey Fenerbahçe
+Twente Netherlands	30 Jan	Turkey Beşiktaş
+Ferencváros Hungary	30 Jan	Netherlands AZ
+FCSB Romania	30 Jan	England Manchester United
+Maccabi Tel Aviv Israel	30 Jan	Portugal Porto
+Nice France	30 Jan	Norway Bodø/Glimt
+Olympiacos Greece	30 Jan	Azerbaijan Qarabağ
+Lyon France	30 Jan	Bulgaria Ludogorets Razgrad
+Rangers Scotland	30 Jan	Belgium Union Saint-Gilloise
+Real Sociedad Spain	30 Jan	Greece PAOK
+Anderlecht Belgium	30 Jan	Germany TSG Hoffenheim
+Braga Portugal	30 Jan	Italy Lazio
+Slavia Prague Czech Republic	30 Jan	Sweden Malmö FF
+Tottenham Hotspur England	30 Jan	Sweden IF Elfsborg
+###### END OF LEAGUE PHASE FIXTURES, TAKEN FROM https://en.wikipedia.org/wiki/2024%E2%80%9325_UEFA_Europa_League#League_phase ######

@@ -1,0 +1,161 @@
+Matchday 1
+Home	Score	Away
+Young Boys Switzerland	17 Sep	England Aston Villa
+Juventus Italy	17 Sep	Netherlands PSV Eindhoven
+Milan Italy	17 Sep	England Liverpool
+Bayern Munich Germany	17 Sep	Croatia Dinamo Zagreb
+Real Madrid Spain	17 Sep	Germany VfB Stuttgart
+Sporting CP Portugal	17 Sep	France Lille
+Sparta Prague Czech Republic	18 Sep	Austria Red Bull Salzburg
+Bologna Italy	18 Sep	Ukraine Shakhtar Donetsk
+Celtic Scotland	18 Sep	Slovakia Slovan Bratislava
+Club Brugge Belgium	18 Sep	Germany Borussia Dortmund
+Manchester City England	18 Sep	Italy Inter Milan
+Paris Saint-Germain France	18 Sep	Spain Girona
+Feyenoord Netherlands	19 Sep	Germany Bayer Leverkusen
+Red Star Belgrade Serbia	19 Sep	Portugal Benfica
+Monaco France	19 Sep	Spain Barcelona
+Atalanta Italy	19 Sep	England Arsenal
+Atlético Madrid Spain	19 Sep	Germany RB Leipzig
+Brest France	19 Sep	Austria Sturm Graz
+Matchday 2
+Home	Score	Away
+Red Bull Salzburg Austria	1 Oct	France Brest
+VfB Stuttgart Germany	1 Oct	Czech Republic Sparta Prague
+Arsenal England	1 Oct	France Paris Saint-Germain
+Bayer Leverkusen Germany	1 Oct	Italy Milan
+Borussia Dortmund Germany	1 Oct	Scotland Celtic
+Barcelona Spain	1 Oct	Switzerland Young Boys
+Inter Milan Italy	1 Oct	Serbia Red Star Belgrade
+PSV Eindhoven Netherlands	1 Oct	Portugal Sporting CP
+Slovan Bratislava Slovakia	1 Oct	England Manchester City
+Shakhtar Donetsk Ukraine	2 Oct	Italy Atalanta
+Girona Spain	2 Oct	Netherlands Feyenoord
+Aston Villa England	2 Oct	Germany Bayern Munich
+Dinamo Zagreb Croatia	2 Oct	France Monaco
+Liverpool England	2 Oct	Italy Bologna
+Lille France	2 Oct	Spain Real Madrid
+RB Leipzig Germany	2 Oct	Italy Juventus
+Sturm Graz Austria	2 Oct	Belgium Club Brugge
+Benfica Portugal	2 Oct	Spain Atlético Madrid
+Matchday 3
+Home	Score	Away
+Milan Italy	22 Oct	Belgium Club Brugge
+Monaco France	22 Oct	Serbia Red Star Belgrade
+Arsenal England	22 Oct	Ukraine Shakhtar Donetsk
+Aston Villa England	22 Oct	Italy Bologna
+Girona Spain	22 Oct	Slovakia Slovan Bratislava
+Juventus Italy	22 Oct	Germany VfB Stuttgart
+Paris Saint-Germain France	22 Oct	Netherlands PSV Eindhoven
+Real Madrid Spain	22 Oct	Germany Borussia Dortmund
+Sturm Graz Austria	22 Oct	Portugal Sporting CP
+Atalanta Italy	23 Oct	Scotland Celtic
+Brest France	23 Oct	Germany Bayer Leverkusen
+Atlético Madrid Spain	23 Oct	France Lille
+Young Boys Switzerland	23 Oct	Italy Inter Milan
+Barcelona Spain	23 Oct	Germany Bayern Munich
+Red Bull Salzburg Austria	23 Oct	Croatia Dinamo Zagreb
+Manchester City England	23 Oct	Czech Republic Sparta Prague
+RB Leipzig Germany	23 Oct	England Liverpool
+Benfica Portugal	23 Oct	Netherlands Feyenoord
+Matchday 4
+Home	Score	Away
+PSV Eindhoven Netherlands	5 Nov	Spain Girona
+Slovan Bratislava Slovakia	5 Nov	Croatia Dinamo Zagreb
+Bologna Italy	5 Nov	France Monaco
+Borussia Dortmund Germany	5 Nov	Austria Sturm Graz
+Celtic Scotland	5 Nov	Germany RB Leipzig
+Liverpool England	5 Nov	Germany Bayer Leverkusen
+Lille France	5 Nov	Italy Juventus
+Real Madrid Spain	5 Nov	Italy Milan
+Sporting CP Portugal	5 Nov	England Manchester City
+Club Brugge Belgium	6 Nov	England Aston Villa
+Shakhtar Donetsk Ukraine	6 Nov	Switzerland Young Boys
+Sparta Prague Czech Republic	6 Nov	France Brest
+Bayern Munich Germany	6 Nov	Portugal Benfica
+Inter Milan Italy	6 Nov	England Arsenal
+Feyenoord Netherlands	6 Nov	Austria Red Bull Salzburg
+Red Star Belgrade Serbia	6 Nov	Spain Barcelona
+Paris Saint-Germain France	6 Nov	Spain Atlético Madrid
+VfB Stuttgart Germany	6 Nov	Italy Atalanta
+Matchday 5
+Home	Score	Away
+Sparta Prague Czech Republic	26 Nov	Spain Atlético Madrid
+Slovan Bratislava Slovakia	26 Nov	Italy Milan
+Bayer Leverkusen Germany	26 Nov	Austria Red Bull Salzburg
+Young Boys Switzerland	26 Nov	Italy Atalanta
+Barcelona Spain	26 Nov	France Brest
+Bayern Munich Germany	26 Nov	France Paris Saint-Germain
+Inter Milan Italy	26 Nov	Germany RB Leipzig
+Manchester City England	26 Nov	Netherlands Feyenoord
+Sporting CP Portugal	26 Nov	England Arsenal
+Red Star Belgrade Serbia	27 Nov	Germany VfB Stuttgart
+Sturm Graz Austria	27 Nov	Spain Girona
+Monaco France	27 Nov	Portugal Benfica
+Aston Villa England	27 Nov	Italy Juventus
+Bologna Italy	27 Nov	France Lille
+Celtic Scotland	27 Nov	Belgium Club Brugge
+Dinamo Zagreb Croatia	27 Nov	Germany Borussia Dortmund
+Liverpool England	27 Nov	Spain Real Madrid
+PSV Eindhoven Netherlands	27 Nov	Ukraine Shakhtar Donetsk
+Matchday 6
+Home	Score	Away
+Girona Spain	10 Dec	England Liverpool
+Dinamo Zagreb Croatia	10 Dec	Scotland Celtic
+Atalanta Italy	10 Dec	Spain Real Madrid
+Bayer Leverkusen Germany	10 Dec	Italy Inter Milan
+Club Brugge Belgium	10 Dec	Portugal Sporting CP
+Red Bull Salzburg Austria	10 Dec	France Paris Saint-Germain
+Shakhtar Donetsk Ukraine	10 Dec	Germany Bayern Munich
+RB Leipzig Germany	10 Dec	England Aston Villa
+Brest France	10 Dec	Netherlands PSV Eindhoven
+Atlético Madrid Spain	11 Dec	Slovakia Slovan Bratislava
+Lille France	11 Dec	Austria Sturm Graz
+Milan Italy	11 Dec	Serbia Red Star Belgrade
+Arsenal England	11 Dec	France Monaco
+Borussia Dortmund Germany	11 Dec	Spain Barcelona
+Feyenoord Netherlands	11 Dec	Czech Republic Sparta Prague
+Juventus Italy	11 Dec	England Manchester City
+Benfica Portugal	11 Dec	Italy Bologna
+VfB Stuttgart Germany	11 Dec	Switzerland Young Boys
+Matchday 7
+Home	Score	Away
+Monaco France	21 Jan	England Aston Villa
+Atalanta Italy	21 Jan	Austria Sturm Graz
+Atlético Madrid Spain	21 Jan	Germany Bayer Leverkusen
+Bologna Italy	21 Jan	Germany Borussia Dortmund
+Club Brugge Belgium	21 Jan	Italy Juventus
+Red Star Belgrade Serbia	21 Jan	Netherlands PSV Eindhoven
+Liverpool England	21 Jan	France Lille
+Slovan Bratislava Slovakia	21 Jan	Germany VfB Stuttgart
+Benfica Portugal	21 Jan	Spain Barcelona
+Shakhtar Donetsk Ukraine	22 Jan	France Brest
+RB Leipzig Germany	22 Jan	Portugal Sporting CP
+Milan Italy	22 Jan	Spain Girona
+Sparta Prague Czech Republic	22 Jan	Italy Inter Milan
+Arsenal England	22 Jan	Croatia Dinamo Zagreb
+Celtic Scotland	22 Jan	Switzerland Young Boys
+Feyenoord Netherlands	22 Jan	Germany Bayern Munich
+Paris Saint-Germain France	22 Jan	England Manchester City
+Real Madrid Spain	22 Jan	Austria Red Bull Salzburg
+Matchday 8
+Home	Score	Away
+Aston Villa England	29 Jan	Scotland Celtic
+Bayer Leverkusen Germany	29 Jan	Czech Republic Sparta Prague
+Borussia Dortmund Germany	29 Jan	Ukraine Shakhtar Donetsk
+Young Boys Switzerland	29 Jan	Serbia Red Star Belgrade
+Barcelona Spain	29 Jan	Italy Atalanta
+Bayern Munich Germany	29 Jan	Slovakia Slovan Bratislava
+Inter Milan Italy	29 Jan	France Monaco
+Red Bull Salzburg Austria	29 Jan	Spain Atlético Madrid
+Girona Spain	29 Jan	England Arsenal
+Dinamo Zagreb Croatia	29 Jan	Italy Milan
+Juventus Italy	29 Jan	Portugal Benfica
+Lille France	29 Jan	Netherlands Feyenoord
+Manchester City England	29 Jan	Belgium Club Brugge
+PSV Eindhoven Netherlands	29 Jan	England Liverpool
+Sturm Graz Austria	29 Jan	Germany RB Leipzig
+Sporting CP Portugal	29 Jan	Italy Bologna
+Brest France	29 Jan	Spain Real Madrid
+VfB Stuttgart Germany	29 Jan	France Paris Saint-Germain
+###### END OF LEAGUE PHASE FIXTURES, TAKEN FROM https://en.wikipedia.org/wiki/2024%E2%80%9325_UEFA_Champions_League#League_phase ######

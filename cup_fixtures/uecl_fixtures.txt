@@ -1,0 +1,121 @@
+Matchday 1
+Home	Score	Away
+İstanbul Başakşehir Turkey	2 Oct	Austria Rapid Wien
+Vitória de Guimarães Portugal	2 Oct	Slovenia Celje
+1. FC Heidenheim Germany	3 Oct	Slovenia Olimpija Ljubljana
+Cercle Brugge Belgium	3 Oct	Switzerland St. Gallen
+Astana Kazakhstan	3 Oct	Serbia TSC
+Dinamo Minsk Belarus	3 Oct	Scotland Heart of Midlothian
+Noah Armenia	3 Oct	Czech Republic Mladá Boleslav
+Legia Warsaw Poland	3 Oct	Spain Real Betis
+Molde Norway	3 Oct	Northern Ireland Larne
+Omonia Cyprus	3 Oct	Iceland Víkingur Reykjavík
+Fiorentina Italy	3 Oct	Wales The New Saints
+Chelsea England	3 Oct	Belgium Gent
+Copenhagen Denmark	3 Oct	Poland Jagiellonia Białystok
+Lugano Switzerland	3 Oct	Finland HJK
+Petrocub Hîncești Moldova	3 Oct	Cyprus Pafos
+Borac Banja Luka Bosnia and Herzegovina	3 Oct	Greece Panathinaikos
+LASK Austria	3 Oct	Sweden Djurgårdens IF
+Shamrock Rovers Republic of Ireland	3 Oct	Cyprus APOEL
+Matchday 2
+Home	Score	Away
+APOEL Cyprus	24 Oct	Bosnia and Herzegovina Borac Banja Luka
+Djurgårdens IF Sweden	24 Oct	Portugal Vitória de Guimarães
+St. Gallen Switzerland	24 Oct	Italy Fiorentina
+Heart of Midlothian Scotland	24 Oct	Cyprus Omonia
+Jagiellonia Białystok Poland	24 Oct	Moldova Petrocub Hîncești
+Gent Belgium	24 Oct	Norway Molde
+Larne Northern Ireland	24 Oct	Republic of Ireland Shamrock Rovers
+Celje Slovenia	24 Oct	Turkey İstanbul Başakşehir
+Panathinaikos Greece	24 Oct	England Chelsea
+Rapid Wien Austria	24 Oct	Armenia Noah
+Mladá Boleslav Czech Republic	24 Oct	Switzerland Lugano
+TSC Serbia	24 Oct	Poland Legia Warsaw
+HJK Finland	24 Oct	Belarus Dinamo Minsk
+Olimpija Ljubljana Slovenia	24 Oct	Austria LASK
+Pafos Cyprus	24 Oct	Germany 1. FC Heidenheim
+Real Betis Spain	24 Oct	Denmark Copenhagen
+The New Saints Wales	24 Oct	Kazakhstan Astana
+Víkingur Reykjavík Iceland	24 Oct	Belgium Cercle Brugge
+Matchday 3
+Home	Score	Away
+Petrocub Hîncești Moldova	7 Nov	Austria Rapid Wien
+TSC Serbia	7 Nov	Switzerland Lugano
+HJK Finland	7 Nov	Slovenia Olimpija Ljubljana
+Gent Belgium	7 Nov	Cyprus Omonia
+Legia Warsaw Poland	7 Nov	Belarus Dinamo Minsk
+Pafos Cyprus	7 Nov	Kazakhstan Astana
+Shamrock Rovers Republic of Ireland	7 Nov	Wales The New Saints
+Víkingur Reykjavík Iceland	7 Nov	Bosnia and Herzegovina Borac Banja Luka
+APOEL Cyprus	7 Nov	Italy Fiorentina
+Chelsea England	7 Nov	Armenia Noah
+Djurgårdens IF Sweden	7 Nov	Greece Panathinaikos
+Copenhagen Denmark	7 Nov	Turkey İstanbul Başakşehir
+Heart of Midlothian Scotland	7 Nov	Germany 1. FC Heidenheim
+Jagiellonia Białystok Poland	7 Nov	Norway Molde
+Larne Northern Ireland	7 Nov	Switzerland St. Gallen
+LASK Austria	7 Nov	Belgium Cercle Brugge
+Real Betis Spain	7 Nov	Slovenia Celje
+Vitória de Guimarães Portugal	7 Nov	Czech Republic Mladá Boleslav
+Matchday 4
+Home	Score	Away
+İstanbul Başakşehir Turkey	27 Nov	Moldova Petrocub Hîncești
+Astana Kazakhstan	28 Nov	Portugal Vitória de Guimarães
+1. FC Heidenheim Germany	28 Nov	England Chelsea
+Cercle Brugge Belgium	28 Nov	Scotland Heart of Midlothian
+Dinamo Minsk Belarus	28 Nov	Denmark Copenhagen
+Noah Armenia	28 Nov	Iceland Víkingur Reykjavík
+St. Gallen Switzerland	28 Nov	Serbia TSC
+Borac Banja Luka Bosnia and Herzegovina	28 Nov	Austria LASK
+Molde Norway	28 Nov	Cyprus APOEL
+Celje Slovenia	28 Nov	Poland Jagiellonia Białystok
+Panathinaikos Greece	28 Nov	Finland HJK
+The New Saints Wales	28 Nov	Sweden Djurgårdens IF
+Fiorentina Italy	28 Nov	Cyprus Pafos
+Lugano Switzerland	28 Nov	Belgium Gent
+Mladá Boleslav Czech Republic	28 Nov	Spain Real Betis
+Olimpija Ljubljana Slovenia	28 Nov	Northern Ireland Larne
+Omonia Cyprus	28 Nov	Poland Legia Warsaw
+Rapid Wien Austria	28 Nov	Republic of Ireland Shamrock Rovers
+Matchday 5
+Home	Score	Away
+Astana Kazakhstan	12 Dec	England Chelsea
+Fiorentina Italy	12 Dec	Austria LASK
+Copenhagen Denmark	12 Dec	Scotland Heart of Midlothian
+Dinamo Minsk Belarus	12 Dec	Northern Ireland Larne
+Noah Armenia	12 Dec	Cyprus APOEL
+Petrocub Hîncești Moldova	12 Dec	Spain Real Betis
+HJK Finland	12 Dec	Norway Molde
+İstanbul Başakşehir Turkey	12 Dec	Germany 1. FC Heidenheim
+Legia Warsaw Poland	12 Dec	Switzerland Lugano
+Olimpija Ljubljana Slovenia	12 Dec	Belgium Cercle Brugge
+St. Gallen Switzerland	12 Dec	Portugal Vitória de Guimarães
+Mladá Boleslav Czech Republic	12 Dec	Poland Jagiellonia Białystok
+Gent Belgium	12 Dec	Serbia TSC
+Omonia Cyprus	12 Dec	Austria Rapid Wien
+Pafos Cyprus	12 Dec	Slovenia Celje
+Shamrock Rovers Republic of Ireland	12 Dec	Bosnia and Herzegovina Borac Banja Luka
+The New Saints Wales	12 Dec	Greece Panathinaikos
+Víkingur Reykjavík Iceland	12 Dec	Sweden Djurgårdens IF
+Matchday 6
+Home	Score	Away
+1. FC Heidenheim Germany	19 Dec	Switzerland St. Gallen
+APOEL Cyprus	19 Dec	Kazakhstan Astana
+Cercle Brugge Belgium	19 Dec	Turkey İstanbul Başakşehir
+Chelsea England	19 Dec	Republic of Ireland Shamrock Rovers
+Djurgårdens IF Sweden	19 Dec	Poland Legia Warsaw
+Lugano Switzerland	19 Dec	Cyprus Pafos
+Borac Banja Luka Bosnia and Herzegovina	19 Dec	Cyprus Omonia
+TSC Serbia	19 Dec	Armenia Noah
+Heart of Midlothian Scotland	19 Dec	Moldova Petrocub Hîncești
+Jagiellonia Białystok Poland	19 Dec	Slovenia Olimpija Ljubljana
+Larne Northern Ireland	19 Dec	Belgium Gent
+LASK Austria	19 Dec	Iceland Víkingur Reykjavík
+Molde Norway	19 Dec	Czech Republic Mladá Boleslav
+Celje Slovenia	19 Dec	Wales The New Saints
+Panathinaikos Greece	19 Dec	Belarus Dinamo Minsk
+Real Betis Spain	19 Dec	Finland HJK
+Rapid Wien Austria	19 Dec	Denmark Copenhagen
+Vitória de Guimarães Portugal	19 Dec	Italy Fiorentina
+###### END OF LEAGUE PHASE FIXTURES, TAKEN FROM https://en.wikipedia.org/wiki/2024%E2%80%9325_UEFA_Conference_League#League_phase ######

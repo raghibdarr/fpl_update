@@ -1,0 +1,1 @@
+# TODO: parse the fixtures from the text files and generate a json file to be used in fpl_bot.py 
