@@ -458,9 +458,6 @@ def format_team_name(name):
 
 # Function to fetch fixture data
 async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="alphabetical"):
-    if selected_teams is None:
-        selected_teams = []
-
     # Fetch FPL data
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{FPL_API_BASE}fixtures/") as resp:
@@ -472,29 +469,28 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
     # Fetch current standings from Football-Data.org API
     current_standings = fetch_current_standings()
 
-    # Create a mapping of FPL team names to Football-Data.org team names
-    fpl_to_football_data = {}
-    for fpl_team in bootstrap['teams']:
-        best_match = None
-        highest_ratio = 0
-        for standings_team in current_standings:
-            ratio = fuzz.partial_ratio(fpl_team['name'].lower(), standings_team['team']['name'].lower())
-            if ratio > highest_ratio:
-                highest_ratio = ratio
-                best_match = standings_team['team']['name']
-        
-        if best_match:
-            fpl_to_football_data[fpl_team['name']] = best_match
-        else:
-            print(f"Warning: No match found for {fpl_team['name']}")
-            fpl_to_football_data[fpl_team['name']] = fpl_team['name']
+    # Create a mapping between FPL short names and Football-Data.org shortNames
+    fpl_to_football_data = {
+        'ARS': 'Arsenal', 'AVL': 'Aston Villa', 'BOU': 'Bournemouth', 'BRE': 'Brentford',
+        'BHA': 'Brighton', 'CHE': 'Chelsea', 'CRY': 'Crystal Palace', 'EVE': 'Everton',
+        'FUL': 'Fulham', 'LIV': 'Liverpool', 'MCI': 'Man City', 'MUN': 'Man United',
+        'NEW': 'Newcastle', 'NFO': 'Nottingham', 'SOU': 'Southampton', 'TOT': 'Tottenham',
+        'WHU': 'West Ham', 'WOL': 'Wolves', 'LEI': 'Leicester', 'IPS': 'Ipswich'
+    }
 
+    # Create a mapping of team names to their positions
+    standings_positions = {fpl_to_football_data.get(team['team']['tla'], team['team']['shortName']): team['position'] 
+                           for team in current_standings}
+
+    # Create teams dictionary
     teams = {team['id']: {
         'short': team['short_name'],
         'name': team['name'],
-        'position': next((t['position'] for t in current_standings if t['team']['name'] == fpl_to_football_data[team['name']]), 0)
+        'position': standings_positions.get(fpl_to_football_data.get(team['short_name'], team['short_name']), 999)
     } for team in bootstrap['teams']}
 
+    # Create a mapping of team short names to their positions
+    team_positions = {team['short']: team['position'] for team in teams.values()}
     # Create a reverse mapping of aliases to team names
     alias_to_team = {}
     for team, aliases in team_aliases.items():
@@ -564,12 +560,23 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
         avg_fdr = {team: sum(f['fdr'] for f in fixtures if f['fdr'] != 0) / sum(1 for f in fixtures if f['fdr'] != 0) for team, fixtures in fixture_data.items()}
         sorted_teams = sorted(fixture_data.keys(), key=lambda x: avg_fdr[x])
     elif sort_method == "table":
-        sorted_teams = sorted(fixture_data.keys(), key=lambda x: next((team['position'] for team in teams.values() if team['short'] == x), 0))
+        sorted_teams = sorted(fixture_data.keys(), key=lambda x: team_positions[x])
     else:  # alphabetical
         sorted_teams = sorted(fixture_data.keys())
 
     # Reorder fixture_data based on the sorting
     fixture_data = {team: fixture_data[team] for team in sorted_teams}
+
+    # Print debug information
+    print(f"Sort method: {sort_method}")
+    print("Sorted teams:")
+    for team in sorted_teams:
+        if sort_method == "fdr":
+            print(f"{team}: Avg FDR {avg_fdr.get(team, 'N/A'):.2f}")
+        elif sort_method == "table":
+            print(f"{team}: Position {team_positions[team]}")
+        else:
+            print(team)
 
     # Get the dates for each gameweek
     gw_dates = {}
