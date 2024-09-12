@@ -26,9 +26,9 @@ headers = {
     'x-rapidapi-host': "football-web-pages1.p.rapidapi.com"
 }
 
-### Make GET requests to the API endpoint ##
+### GET PREMIER LEAGUE TEAMS ###
 
-### Get premier league teams ###
+# Make GET request to get premier league teams
 conn.request("GET", "/teams.json?comp=" + str(PREMIER_LEAGUE_ID), headers=headers)
 prem_teams = conn.getresponse()
 prem_teams_data = prem_teams.read()
@@ -42,23 +42,36 @@ prem_team_ids = [team['id'] for team in prem_teams_json['teams']]
 # Print the list of Premier League team IDs
 print("Premier League Team IDs:", prem_team_ids)
 
-### Get the fixtures/results of UCL ###
+### GET UCL FIXTURES ###
+
+# Get the fixtures/results of UCL
 conn.request("GET", "/fixtures-results.json?comp=24", headers=headers)
 ucl_fixtures = conn.getresponse()
 ucl_fixtures_data = ucl_fixtures.read()
 
-# Parse the JSON data
+# Parse the JSON data for UCL fixtures
 ucl_fixtures_json = json.loads(ucl_fixtures_data.decode("utf-8"))
 
-# Print the list of UCL fixtures
-print("UCL Fixtures:", ucl_fixtures_json)
+# Filter UCL fixtures
+filtered_ucl_fixtures = []
+excluded_rounds = ['First Qualifying Round', 'Second Qualifying Round', 'Third Qualifying Round']
 
-# TO-DO: Filter the data to only include fixtures/results of premier league teams
+# Print the structure of the first match to understand the data
+print("Structure of the first match:")
+print(json.dumps(ucl_fixtures_json['fixtures-results']['matches'][0], indent=2))
 
-# Get the response from the API
-res = conn.getresponse()
-# Read the response data
-data = res.read()
+for match in ucl_fixtures_json['fixtures-results']['matches']:
+    # Use .get() method to safely access potentially missing keys
+    home_team_id = match.get('home-team', {}).get('id')
+    away_team_id = match.get('away-team', {}).get('id')
+    round_name = match.get('round', {}).get('name')
+    status = match.get('status', {}).get('short')
+    
+    # Check if the home or away team is a Premier League team, has not finished and is not in the excluded rounds
+    if ((home_team_id in prem_team_ids or away_team_id in prem_team_ids) and
+        round_name not in excluded_rounds and
+        status != 'FT'):
+        filtered_ucl_fixtures.append(match)
 
-# Print the decoded response data
-#print(data.decode("utf-8"))
+# Print the filtered list of UCL fixtures
+print("UCL Fixtures:", filtered_ucl_fixtures)
