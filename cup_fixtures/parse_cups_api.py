@@ -100,6 +100,20 @@ def get_filtered_fixtures(competition_id, prem_team_ids, competition_name):
 
 # Function to generate abbreviations for non-PL teams
 def generate_abbreviation(team_name):
+    # Custom abbreviations for teams that don't fit the standard pattern
+    custom_abbreviations = {
+        'Inter Milan': 'INT',
+        'AC Milan': 'MIL',
+        'Bayern Munich': 'BAY',
+        'Bayer 04 Leverkusen': 'LEV',
+        'RB Leipzig': 'LEI'
+    }
+
+    # Check for custom abbreviations first
+    if team_name in custom_abbreviations:
+        return custom_abbreviations[team_name]
+
+    # If not in custom abbreviations, use the existing logic
     words = team_name.split()
     if len(words) == 1:
         return team_name[:3].upper() # If the team name is a single word, return the first three characters
@@ -117,3 +131,12 @@ all_fixtures = {
 }
 
 print (f"All fixtures: {all_fixtures}")
+
+# Add placeholder for FA Cup
+all_fixtures['FA'] = []
+
+# Write to JSON file
+with open('cup_fixtures.json', 'w', encoding='utf-8') as json_file:
+    json.dump(all_fixtures, json_file, ensure_ascii=False, indent=2)
+
+print("Fixtures have been parsed and saved to cup_fixtures.json")
