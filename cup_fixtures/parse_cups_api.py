@@ -28,7 +28,7 @@ headers = {
 
 ### Make GET requests to the API endpoint ##
 
-# Get premier league teams
+### Get premier league teams ###
 conn.request("GET", "/teams.json?comp=" + str(PREMIER_LEAGUE_ID), headers=headers)
 prem_teams = conn.getresponse()
 prem_teams_data = prem_teams.read()
@@ -42,9 +42,16 @@ prem_team_ids = [team['id'] for team in prem_teams_json['teams']]
 # Print the list of Premier League team IDs
 print("Premier League Team IDs:", prem_team_ids)
 
-
-# Get the fixtures/results of UCL
+### Get the fixtures/results of UCL ###
 conn.request("GET", "/fixtures-results.json?comp=24", headers=headers)
+ucl_fixtures = conn.getresponse()
+ucl_fixtures_data = ucl_fixtures.read()
+
+# Parse the JSON data
+ucl_fixtures_json = json.loads(ucl_fixtures_data.decode("utf-8"))
+
+# Print the list of UCL fixtures
+print("UCL Fixtures:", ucl_fixtures_json)
 
 # TO-DO: Filter the data to only include fixtures/results of premier league teams
 
