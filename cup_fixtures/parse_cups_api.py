@@ -11,6 +11,15 @@ UCL_ID = 24
 UEL_ID = 25
 UECL_ID = 116
 
+# Create a mapping between PL team abbreviations (used in FPL) and team names from API
+pl_abbreviations_mapping = {
+    'ARS': 'Arsenal', 'AVL': 'Aston Villa', 'BOU': 'AFC Bournemouth', 'BRE': 'Brentford',
+    'BHA': 'Brighton & Hove Albion', 'CHE': 'Chelsea', 'CRY': 'Crystal Palace', 'EVE': 'Everton',
+    'FUL': 'Fulham', 'LIV': 'Liverpool', 'MCI': 'Manchester City', 'MUN': 'Manchester United',
+    'NEW': 'Newcastle United', 'NFO': 'Nottingham Forest', 'SOU': 'Southampton', 'TOT': 'Tottenham Hotspur',
+    'WHU': 'West Ham United', 'WOL': 'Wolverhampton Wanderers', 'LEI': 'Leicester City', 'IPS': 'Ipswich Town'
+}
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -43,7 +52,7 @@ prem_team_ids = [team['id'] for team in prem_teams_json['teams']]
 print("Premier League Team IDs:", prem_team_ids)
 
 # Function to get filtered fixtures
-def get_filtered_fixtures(competition_id, prem_team_ids):
+def get_filtered_fixtures(competition_id, prem_team_ids, competition_name):
     # Get the fixtures/results of the competition
     conn.request("GET", f"/fixtures-results.json?comp={competition_id}", headers=headers)
     fixtures = conn.getresponse()
@@ -67,25 +76,44 @@ def get_filtered_fixtures(competition_id, prem_team_ids):
         if ((home_team_id in prem_team_ids or away_team_id in prem_team_ids) and
             round_name not in excluded_rounds and
             status != 'FT'):
-            filtered_fixtures.append(match)
+            
+            home_team_name = match.get('home-team', {}).get('name', '')
+            away_team_name = match.get('away-team', {}).get('name', '')
+            
+            # Get or generate abbreviations
+            home_team_abbr = next((abbr for abbr, name in pl_abbreviations_mapping.items() if name == home_team_name), 
+                                  generate_abbreviation(home_team_name))
+            away_team_abbr = next((abbr for abbr, name in pl_abbreviations_mapping.items() if name == away_team_name), 
+                                  generate_abbreviation(away_team_name))
+
+            filtered_fixtures.append({
+                'date': match.get('date'),
+                'home_team': home_team_name,
+                'away_team': away_team_name,
+                'home_team_abbr': home_team_abbr,
+                'away_team_abbr': away_team_abbr,
+                'competition': competition_name,
+                'matchday': round_name
+            })
 
     return filtered_fixtures
 
-# Get UCL fixtures
-ucl_fixtures = get_filtered_fixtures(UCL_ID, prem_team_ids)
-print (f"UCL fixtures: {ucl_fixtures}")
+# Function to generate abbreviations for non-PL teams
+def generate_abbreviation(team_name):
+    words = team_name.split()
+    if len(words) == 1:
+        return team_name[:3].upper() # If the team name is a single word, return the first three characters
+    elif len(words) == 2:
+        return (words[0][0] + words[1][:2]).upper() # If the team name is two words, return the first character of the first word and the first two characters of the second word
+    else:
+        return ''.join(word[0] for word in words[:3]).upper()
 
-# Get UEL fixtures
-uel_fixtures = get_filtered_fixtures(UEL_ID, prem_team_ids)
-print (f"UEL fixtures: {uel_fixtures}")
-
-# Get UECL fixtures
-uecl_fixtures = get_filtered_fixtures(UECL_ID, prem_team_ids)
-print (f"UECL fixtures: {uecl_fixtures}")
-
-# Create a mapping between PL team abbreviations (used in FPL) and team names from API
-pl_abbreviations_mapping = {
-    'ARS': 'Arsenal', 'AVL': 'Aston Villa', 'LIV': 'Liverpool', 'MCI': 'Manchester City',
-    'TOT': 'Tottenham Hotspur', 'MUN': 'Manchester United',
-    'CHE': 'Chelsea', 
+# Get fixtures for each competition
+all_fixtures = {
+    'UCL': get_filtered_fixtures(UCL_ID, prem_team_ids, 'UCL'),
+    'UEL': get_filtered_fixtures(UEL_ID, prem_team_ids, 'UEL'),
+    'UECL': get_filtered_fixtures(UECL_ID, prem_team_ids, 'UECL'),
+    'EFL': get_filtered_fixtures(EFL_CUP_ID, prem_team_ids, 'EFL')
 }
+
+print (f"All fixtures: {all_fixtures}")
