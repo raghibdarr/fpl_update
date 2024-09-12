@@ -81,10 +81,8 @@ def get_filtered_fixtures(competition_id, prem_team_ids, competition_name):
             away_team_name = match.get('away-team', {}).get('name', '')
             
             # Get or generate abbreviations
-            home_team_abbr = next((abbr for abbr, name in pl_abbreviations_mapping.items() if name == home_team_name), 
-                                  generate_abbreviation(home_team_name))
-            away_team_abbr = next((abbr for abbr, name in pl_abbreviations_mapping.items() if name == away_team_name), 
-                                  generate_abbreviation(away_team_name))
+            home_team_abbr = pl_abbreviations_mapping.get(home_team_name, generate_abbreviation(home_team_name))
+            away_team_abbr = pl_abbreviations_mapping.get(away_team_name, generate_abbreviation(away_team_name))
 
             filtered_fixtures.append({
                 'date': match.get('date'),
@@ -95,7 +93,7 @@ def get_filtered_fixtures(competition_id, prem_team_ids, competition_name):
                 'competition': competition_name,
                 'matchday': round_name
             })
-
+            
     return filtered_fixtures
 
 # Function to generate abbreviations for non-PL teams
