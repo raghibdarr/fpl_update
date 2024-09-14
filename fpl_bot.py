@@ -300,10 +300,19 @@ async def fixtures(ctx, *, args=""):
     num_gameweeks = 6  # Default
     teams = []
     sort_method = "alphabetical"  # Default sorting method
+    start_gw = None
+    end_gw = None
     
     for param in params:
-        if param.isdigit():
-            num_gameweeks = min(int(param), 38)
+        if param.lower().startswith("gw"):
+            gw = int(param[2:])
+            if start_gw is None:
+                start_gw = gw
+            else:
+                end_gw = gw
+        elif param.isdigit():
+            if start_gw is None:  # Only set num_gameweeks if GW range is not specified
+                num_gameweeks = min(int(param), 38)
         elif param.lower() in ["fdr", "alphabetical", "table"]:
             sort_method = param.lower()
         else:
@@ -320,15 +329,24 @@ async def fixtures(ctx, *, args=""):
                 teams.remove(word)
             teams.append(multi_word_team)
     
+    # Calculate num_gameweeks based on GW parameters if provided
+    if start_gw is not None:
+        if end_gw is None:
+            end_gw = 38
+        num_gameweeks = end_gw - start_gw + 1
+    
     num_gameweeks = min(num_gameweeks, 38)  # Cap at 38 gameweeks
 
     print(f"Teams after parsing: {teams}")
     print(f"Sort method: {sort_method}")
+    print(f"Start GW: {start_gw}")
+    print(f"End GW: {end_gw}")
+    print(f"Number of gameweeks: {num_gameweeks}")
     
     await ctx.send("Generating fixture grid... This may take a moment.")
     
     try:
-        fixture_data, start_gw, actual_gameweeks, team_names, gw_dates = await fetch_fixture_data(num_gameweeks, teams, sort_method)
+        fixture_data, actual_start_gw, actual_gameweeks, team_names, gw_dates = await fetch_fixture_data(num_gameweeks, teams, sort_method, start_gw)
         if not fixture_data:
             await ctx.send("No valid teams found. Please check your team names and try again.")
             return
@@ -370,7 +388,7 @@ async def fixtures(ctx, *, args=""):
             for short_name in fixture_data.keys():
                 print(f"Team: {short_name}, Position: {team_positions.get(short_name, 'N/A')}, Points: {team_points.get(short_name, 'N/A')}")
         
-        image = create_fixture_grid(fixture_data, actual_gameweeks, start_gw, team_names, gw_dates, sort_method, team_positions, team_points)
+        image = create_fixture_grid(fixture_data, actual_gameweeks, actual_start_gw, team_names, gw_dates, sort_method, team_positions, team_points)
         
         img_byte_arr = io.BytesIO()
         image.save(img_byte_arr, format='PNG')
@@ -457,7 +475,7 @@ def format_team_name(name):
     return name_mapping.get(name, name)
 
 # Function to fetch fixture data
-async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="alphabetical"):
+async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="alphabetical", start_gw=None):
     # Fetch FPL data
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{FPL_API_BASE}fixtures/") as resp:
@@ -531,21 +549,23 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
     current_time = datetime.now(timezone.utc)
     current_gw = next((event for event in bootstrap['events'] if event['is_current']), None)
     
-    if current_gw:
-        gw_deadline = datetime.strptime(current_gw['deadline_time'], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
-        if current_time > gw_deadline:
-            start_gw = current_gw['id'] + 1
+    if start_gw is None:
+        if current_gw:
+            gw_deadline = datetime.strptime(current_gw['deadline_time'], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+            if current_time > gw_deadline:
+                start_gw = current_gw['id'] + 1
+            else:
+                start_gw = current_gw['id']
         else:
-            start_gw = current_gw['id']
-    else:
-        start_gw = next(event['id'] for event in bootstrap['events'] if not event['finished'])
+            start_gw = next(event['id'] for event in bootstrap['events'] if not event['finished'])
 
-    actual_gameweeks = min(num_gameweeks, 38 - start_gw + 1)
+    end_gw = min(start_gw + num_gameweeks - 1, 38)
+    actual_gameweeks = end_gw - start_gw + 1
 
     fixture_data = {team['short']: [{'opponent': '', 'fdr': 0}] * actual_gameweeks for team in filtered_teams.values()}
 
     for fixture in fixtures:
-        if start_gw <= fixture['event'] < start_gw + actual_gameweeks:
+        if start_gw <= fixture['event'] <= end_gw:
             gw_index = fixture['event'] - start_gw
             home_team = teams[fixture['team_h']]['short']
             away_team = teams[fixture['team_a']]['short']
@@ -581,7 +601,7 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
     # Get the dates for each gameweek
     gw_dates = {}
     for event in bootstrap['events']:
-        if start_gw <= event['id'] < start_gw + actual_gameweeks:
+        if start_gw <= event['id'] <= end_gw:
             gw_dates[event['id']] = datetime.strptime(event['deadline_time'], "%Y-%m-%dT%H:%M:%SZ").strftime("%d/%m")
 
     return fixture_data, start_gw, actual_gameweeks, {v['short']: v['name'] for v in filtered_teams.values()}, gw_dates
