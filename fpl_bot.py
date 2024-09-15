@@ -302,6 +302,7 @@ async def fixtures(ctx, *, args=""):
     sort_method = "alphabetical"  # Default sorting method
     start_gw = None
     end_gw = None
+    show_cups = False  # New parameter for cup fixtures
     
     for param in params:
         if param.lower().startswith("gw"):
@@ -315,6 +316,8 @@ async def fixtures(ctx, *, args=""):
                 num_gameweeks = min(int(param), 38)
         elif param.lower() in ["fdr", "alphabetical", "table"]:
             sort_method = param.lower()
+        elif param.lower() == "cups":
+            show_cups = True
         else:
             teams.extend(param.strip().rstrip(',').lower().split(','))
     
@@ -342,11 +345,12 @@ async def fixtures(ctx, *, args=""):
     print(f"Start GW: {start_gw}")
     print(f"End GW: {end_gw}")
     print(f"Number of gameweeks: {num_gameweeks}")
+    print(f"Show cups: {show_cups}")
     
     await ctx.send("Generating fixture grid... This may take a moment.")
     
     try:
-        fixture_data, actual_start_gw, actual_gameweeks, team_names, gw_dates = await fetch_fixture_data(num_gameweeks, teams, sort_method, start_gw)
+        fixture_data, actual_start_gw, actual_gameweeks, team_names, gw_dates, cup_fixture_buckets = await fetch_fixture_data(num_gameweeks, teams, sort_method, start_gw, show_cups)
         if not fixture_data:
             await ctx.send("No valid teams found. Please check your team names and try again.")
             return
@@ -388,7 +392,7 @@ async def fixtures(ctx, *, args=""):
             for short_name in fixture_data.keys():
                 print(f"Team: {short_name}, Position: {team_positions.get(short_name, 'N/A')}, Points: {team_points.get(short_name, 'N/A')}")
         
-        image = create_fixture_grid(fixture_data, actual_gameweeks, actual_start_gw, team_names, gw_dates, sort_method, team_positions, team_points)
+        image = create_fixture_grid(fixture_data, actual_gameweeks, actual_start_gw, team_names, gw_dates, sort_method, team_positions, team_points, cup_fixture_buckets)
         
         img_byte_arr = io.BytesIO()
         image.save(img_byte_arr, format='PNG')
@@ -475,7 +479,7 @@ def format_team_name(name):
     return name_mapping.get(name, name)
 
 # Function to fetch fixture data
-async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="alphabetical", start_gw=None):
+async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="alphabetical", start_gw=None, show_cups=False):
     # Fetch FPL data
     async with aiohttp.ClientSession() as session:
         async with session.get(f"{FPL_API_BASE}fixtures/") as resp:
@@ -604,10 +608,37 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
         if start_gw <= event['id'] <= end_gw:
             gw_dates[event['id']] = datetime.strptime(event['deadline_time'], "%Y-%m-%dT%H:%M:%SZ").strftime("%d/%m")
 
-    return fixture_data, start_gw, actual_gameweeks, {v['short']: v['name'] for v in filtered_teams.values()}, gw_dates
+    # Load cup fixtures if show_cups is True
+    cup_fixture_buckets = {}
+    if show_cups:
+        with open('cup_fixtures/cup_fixtures.json', 'r') as f:
+            cup_fixtures = json.load(f)
+        
+        # Group cup fixtures by the gameweek they follow
+        for competition, fixtures in cup_fixtures.items():
+            for fixture in fixtures:
+                fixture_date = datetime.strptime(fixture['date'], "%Y-%m-%d")
+                gw = next((event['id'] for event in bootstrap['events'] if datetime.strptime(event['deadline_time'], "%Y-%m-%dT%H:%M:%SZ") > fixture_date), None)
+                if gw:
+                    if gw not in cup_fixture_buckets:
+                        cup_fixture_buckets[gw] = []
+                    cup_fixture_buckets[gw].append({
+                        'team': fixture['home_team_abbr'],
+                        'opponent': fixture['away_team_abbr'],
+                        'is_home': True,
+                        'competition': competition
+                    })
+                    cup_fixture_buckets[gw].append({
+                        'team': fixture['away_team_abbr'],
+                        'opponent': fixture['home_team_abbr'],
+                        'is_home': False,
+                        'competition': competition
+                    })
+
+    return fixture_data, start_gw, actual_gameweeks, {v['short']: v['name'] for v in filtered_teams.values()}, gw_dates, cup_fixture_buckets
 
 # Function to create fixture grid
-def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names, gw_dates, sort_method, team_positions, team_points):
+def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names, gw_dates, sort_method, team_positions, team_points, cup_fixture_buckets):
     cell_width, cell_height = 100, 30
     team_column_width = 120
     position_column_width = 40 if sort_method == "table" else 0
@@ -618,7 +649,10 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names, gw_da
     header_height_large = 50  # Height for GW headers
     gap_height = 10  # Gap between headers and data
     
-    width = padding * 2 + position_column_width + team_column_width + points_column_width + spacing + (cell_width * num_gameweeks)
+    # Calculate total number of columns including cup fixtures
+    total_columns = num_gameweeks + sum(1 for gw in range(start_gw, start_gw + num_gameweeks) if gw in cup_fixture_buckets)
+    
+    width = padding * 2 + position_column_width + team_column_width + points_column_width + spacing + (cell_width * total_columns)
     height = padding * 2 + header_height_large + gap_height + (cell_height * len(fixture_data))
     image = Image.new('RGB', (width, height), color='white')
     draw = ImageDraw.Draw(image)
@@ -640,12 +674,21 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names, gw_da
     draw.rectangle([padding + position_column_width, padding + header_height_large - header_height_small, padding + position_column_width + team_column_width, padding + header_height_large], outline='black')
     draw.text((padding + position_column_width + 5, padding + header_height_large - 5), "Club", font=header_font, fill='black', anchor="lb")
     
-    # Draw headers and dates for gameweeks
+    # Draw headers and dates for gameweeks and cup fixtures
+    column = 0
     for i in range(num_gameweeks):
-        x = padding + position_column_width + team_column_width + points_column_width + spacing + i*cell_width
+        gw = start_gw + i
+        x = padding + position_column_width + team_column_width + points_column_width + spacing + column * cell_width
         draw.rectangle([x, padding, x + cell_width, padding + header_height_large], outline='black')
-        draw.text((x + cell_width/2, padding + 10), gw_dates.get(start_gw + i, ""), font=date_font, fill='black', anchor="mt")
-        draw.text((x + cell_width/2, padding + header_height_large - 10), f"GW{start_gw + i}", font=header_font, fill='black', anchor="mb")
+        draw.text((x + cell_width/2, padding + 10), gw_dates.get(gw, ""), font=date_font, fill='black', anchor="mt")
+        draw.text((x + cell_width/2, padding + header_height_large - 10), f"GW{gw}", font=header_font, fill='black', anchor="mb")
+        column += 1
+        
+        if gw in cup_fixture_buckets:
+            x = padding + position_column_width + team_column_width + points_column_width + spacing + column * cell_width
+            draw.rectangle([x, padding, x + cell_width, padding + header_height_large], fill='lightblue', outline='black')
+            draw.text((x + cell_width/2, padding + header_height_large/2), "CUP", font=header_font, fill='black', anchor="mm")
+            column += 1
     
     # Draw team names, positions, points, and fixtures
     for i, (team_short, fixtures) in enumerate(fixture_data.items()):
@@ -666,19 +709,41 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names, gw_da
             draw.rectangle([padding + position_column_width + team_column_width, y, padding + position_column_width + team_column_width + points_column_width, y + cell_height], outline='black')
             draw.text((padding + position_column_width + team_column_width + points_column_width/2, y + cell_height/2), str(team_points.get(team_short, '')), font=bold_font, fill='black', anchor="mm")
         
-        for j, fixture in enumerate(fixtures):
-            x = padding + position_column_width + team_column_width + points_column_width + spacing + j*cell_width
-            color = get_fixture_color(fixture)
-            text_color = get_text_color(fixture)
-            draw.rectangle([x, y, x + cell_width, y + cell_height], fill=color, outline='black')
+        column = 0
+        for j in range(num_gameweeks):
+            gw = start_gw + j
+            x = padding + position_column_width + team_column_width + points_column_width + spacing + column * cell_width
             
-            is_home = fixture['opponent'].isupper()
-            text_font = bold_font if is_home else font
+            # Draw league fixture
+            if j < len(fixtures):
+                fixture = fixtures[j]
+                color = get_fixture_color(fixture)
+                draw.rectangle([x, y, x + cell_width, y + cell_height], fill=color, outline='black')
+                
+                is_home = fixture['opponent'].isupper()
+                text_font = bold_font if is_home else font
+                
+                draw.text((x + cell_width/2, y + cell_height/2), fixture['opponent'], font=text_font, fill='black', anchor="mm")
+            else:
+                draw.rectangle([x, y, x + cell_width, y + cell_height], fill='white', outline='black')
             
-            draw.text((x + cell_width/2, y + cell_height/2), fixture['opponent'], font=text_font, fill=text_color, anchor="mm")
+            column += 1
+            
+            # Draw cup fixture if exists
+            if gw in cup_fixture_buckets:
+                x = padding + position_column_width + team_column_width + points_column_width + spacing + column * cell_width
+                draw.rectangle([x, y, x + cell_width, y + cell_height], fill='lightblue', outline='black')
+                
+                cup_fixture = next((f for f in cup_fixture_buckets[gw] if f['team'] == team_short), None)
+                if cup_fixture:
+                    opponent = cup_fixture['opponent'].upper() if cup_fixture['is_home'] else cup_fixture['opponent'].lower()
+                    text_font = bold_font if cup_fixture['is_home'] else font
+                    draw.text((x + cell_width/2, y + cell_height/2), opponent, font=text_font, fill='black', anchor="mm")
+                
+                column += 1
     
     # Draw gridlines for fixture columns only
-    for i in range(num_gameweeks + 1):
+    for i in range(total_columns + 1):
         x = padding + position_column_width + team_column_width + points_column_width + spacing + i*cell_width
         draw.line([(x, padding + header_height_large + gap_height), (x, height - padding)], fill='black', width=1)
     
