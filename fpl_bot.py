@@ -10,7 +10,7 @@ import os
 from dotenv import load_dotenv
 from collections import defaultdict
 import aiosqlite
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageColor
 import io
 import json
 import requests
@@ -32,6 +32,15 @@ def get_fdr_color(difficulty):
         return 0xFF1751  # Light Red
     else:
         return 0x80072D  # Dark Red
+    
+# Cup colors
+CUP_COLORS = {
+    "UCL": "#1A3772",
+    "UEL": "#F25E27",
+    "UECL": "#6CC24A",
+    "EFL": "#1D925F",
+    "FA": "#D70024"
+}
     
 # Bot setup
 intents = discord.Intents.default()
@@ -732,13 +741,23 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names, gw_da
             # Draw cup fixture if exists
             if gw in cup_fixture_buckets:
                 x = padding + position_column_width + team_column_width + points_column_width + spacing + column * cell_width
-                draw.rectangle([x, y, x + cell_width, y + cell_height], fill='lightblue', outline='black')
                 
                 cup_fixture = next((f for f in cup_fixture_buckets[gw] if f['team'] == team_short), None)
                 if cup_fixture:
+                    cup_color = CUP_COLORS.get(cup_fixture['competition'], 'lightblue')  # Default to lightblue if competition not found
+                    draw.rectangle([x, y, x + cell_width, y + cell_height], fill=cup_color, outline='black')
+                    
                     opponent = cup_fixture['opponent'].upper() if cup_fixture['is_home'] else cup_fixture['opponent'].lower()
                     text_font = bold_font if cup_fixture['is_home'] else font
-                    draw.text((x + cell_width/2, y + cell_height/2), opponent, font=text_font, fill='black', anchor="mm")
+                    
+                    # Determine text color based on background color brightness
+                    bg_color = ImageColor.getrgb(cup_color)
+                    brightness = (bg_color[0] * 299 + bg_color[1] * 587 + bg_color[2] * 114) / 1000
+                    text_color = 'black' if brightness > 128 else 'white'
+                    
+                    draw.text((x + cell_width/2, y + cell_height/2), opponent, font=text_font, fill=text_color, anchor="mm")
+                else:
+                    draw.rectangle([x, y, x + cell_width, y + cell_height], fill='lightblue', outline='black')
                 
                 column += 1
     
