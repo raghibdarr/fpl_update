@@ -104,7 +104,13 @@ def generate_abbreviation(team_name):
         'AC Milan': 'MIL',
         'Bayern Munich': 'BAY',
         'Bayer 04 Leverkusen': 'LEV',
-        'RB Leipzig': 'LEI'
+        'RB Leipzig': 'LEI',
+        # PL teams:
+        'Arsenal': 'ARS', 'Aston Villa': 'AVL', 'AFC Bournemouth': 'BOU', 'Brentford': 'BRE',
+        'Brighton & Hove Albion': 'BHA', 'Chelsea': 'CHE', 'Crystal Palace': 'CRY', 'Everton': 'EVE',
+        'Fulham': 'FUL', 'Liverpool': 'LIV', 'Manchester City': 'MCI', 'Manchester United': 'MUN',
+        'Newcastle United': 'NEW', 'Nottingham Forest': 'NFO', 'Southampton': 'SOU', 'Tottenham Hotspur': 'TOT',
+        'West Ham United': 'WHU', 'Wolverhampton Wanderers': 'WOL', 'Leicester City': 'LEI', 'Ipswich Town': 'IPS',
     }
 
     # Check for custom abbreviations first
