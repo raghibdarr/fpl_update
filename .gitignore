@@ -1,1 +1,14 @@
+# Virtual environments
+fpl_bot_env/
+.venv/
+venv/
+env/
+
+# Python cache/artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Env files
 .env
+.env.*
