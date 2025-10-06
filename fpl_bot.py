@@ -567,6 +567,7 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
                     cup_fixture_buckets[gw_map].append({
                         'team': home_short,
                         'opponent': (away_short or abbreviate_team_name(away_name)),
+                        'opponent_full': away_name,
                         'is_home': True,
                         'competition': cup_name
                     })
@@ -574,6 +575,7 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
                     cup_fixture_buckets[gw_map].append({
                         'team': away_short,
                         'opponent': (home_short or abbreviate_team_name(home_name)),
+                        'opponent_full': home_name,
                         'is_home': False,
                         'competition': cup_name
                     })
@@ -624,6 +626,8 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names, gw_da
     bold_font = ImageFont.truetype("arialbd.ttf", 16)
     header_font = ImageFont.truetype("arialbd.ttf", 16)
     date_font = ImageFont.truetype("arial.ttf", 14)
+    cup_font = ImageFont.truetype("arial.ttf", 12)  # slightly smaller for CUP cells
+    cup_bold_font = ImageFont.truetype("arialbd.ttf", 12)
     
     # Draw headers for position, club, and points columns only if sort_method is "table"
     if sort_method == "table":
@@ -701,15 +705,32 @@ def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names, gw_da
                     cup_color = CUP_COLORS.get(cup_fixture['competition'], 'lightblue')  # Default to lightblue if competition not found
                     draw.rectangle([x, y, x + cell_width, y + cell_height], fill=cup_color, outline='black')
                     
-                    opponent = cup_fixture['opponent'].upper() if cup_fixture['is_home'] else cup_fixture['opponent'].lower()
-                    text_font = bold_font if cup_fixture['is_home'] else font
+                    # Use full opponent name if available; otherwise use existing opponent text
+                    opponent_key = cup_fixture.get('opponent_full') or cup_fixture['opponent']
+                    display_text = opponent_key
+                    text_font = cup_bold_font if cup_fixture['is_home'] else cup_font
                     
                     # Determine text color based on background color brightness
                     bg_color = ImageColor.getrgb(cup_color)
                     brightness = (bg_color[0] * 299 + bg_color[1] * 587 + bg_color[2] * 114) / 1000
                     text_color = 'black' if brightness > 128 else 'white'
                     
-                    draw.text((x + cell_width/2, y + cell_height/2), opponent, font=text_font, fill=text_color, anchor="mm")
+                    # Wrap into up to two lines within the cell
+                    max_text_width = cell_width - 8
+                    line1, line2 = wrap_text_to_two_lines(draw, display_text, text_font, max_text_width)
+                    if line2:
+                        ascent, descent = text_font.getmetrics()
+                        line_height = ascent + descent
+                        gap_px = max(1, int(line_height * 0.15))
+                        total_h = line_height * 2 + gap_px
+                        top_y = y + (cell_height - total_h) / 2
+                        y1 = top_y + line_height / 2
+                        y2 = y1 + line_height + gap_px
+                        draw.text((x + cell_width/2, y1), line1, font=text_font, fill=text_color, anchor="mm")
+                        draw.text((x + cell_width/2, y2), line2, font=text_font, fill=text_color, anchor="mm")
+                    else:
+                        fitted = fit_text_to_width(draw, line1, text_font, max_text_width)
+                        draw.text((x + cell_width/2, y + cell_height/2), fitted, font=text_font, fill=text_color, anchor="mm")
                 else:
                     draw.rectangle([x, y, x + cell_width, y + cell_height], fill='lightblue', outline='black')
                 
@@ -764,6 +785,49 @@ def abbreviate_team_name(team_name: str) -> str:
     if len(words) == 2:
         return (words[0][0] + words[1][:2]).upper()
     return (words[0][0] + words[1][0] + words[2][0]).upper()
+
+# Helper to fit text into a max pixel width with ellipsis
+def fit_text_to_width(draw, text: str, font, max_width: int) -> str:
+    if draw.textlength(text, font=font) <= max_width:
+        return text
+    ellipsis = '…'
+    # Binary search for the longest prefix that fits
+    lo, hi = 0, len(text)
+    best = ''
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        candidate = text[:mid] + ellipsis
+        if draw.textlength(candidate, font=font) <= max_width:
+            best = candidate
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return best if best else (text[:1] + ellipsis)
+
+# Wrap text into up to two lines within max width. Second line may be ellipsized.
+def wrap_text_to_two_lines(draw, text: str, font, max_width: int):
+    if draw.textlength(text, font=font) <= max_width:
+        return text, ''
+    tokens = text.split()
+    if len(tokens) == 1:
+        # No spaces to wrap; fall back to ellipsis on one line
+        return fit_text_to_width(draw, text, font, max_width), ''
+    line1_tokens = []
+    for token in tokens:
+        test = (' '.join(line1_tokens + [token])).strip()
+        if draw.textlength(test, font=font) <= max_width:
+            line1_tokens.append(token)
+        else:
+            break
+    if not line1_tokens:
+        # First token alone doesn't fit; ellipsize single-line
+        return fit_text_to_width(draw, tokens[0], font, max_width), ''
+    line1 = ' '.join(line1_tokens)
+    remaining = ' '.join(tokens[len(line1_tokens):]).strip()
+    if not remaining:
+        return line1, ''
+    line2 = fit_text_to_width(draw, remaining, font, max_width)
+    return line1, line2
 
 # Command to get schedule
 @bot.command()
