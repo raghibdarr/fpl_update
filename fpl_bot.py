@@ -7,6 +7,8 @@ import difflib
 from datetime import datetime, timezone, timedelta
 from discord import Embed, Color
 import os
+import socket
+import sys
 from dotenv import load_dotenv
 from collections import defaultdict
 import aiosqlite
@@ -45,6 +47,20 @@ intents = discord.Intents.default()
 intents.message_content = True
 bot = commands.Bot(command_prefix='!', intents=intents)
 
+# Ensure only a single instance of the bot runs per machine
+_singleton_socket = None
+
+def acquire_single_instance_lock(port: int) -> bool:
+    try:
+        global _singleton_socket
+        _singleton_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        _singleton_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        _singleton_socket.bind(("127.0.0.1", port))
+        _singleton_socket.listen(1)
+        return True
+    except OSError:
+        return False
+
 # Team aliases for fuzzy matching
 team_aliases = {
     "Arsenal": ["arsenal", "ars", "gunners", "arsenal fc", "the gunners", "the arsenal", "arsenal fc", "gooners", "the gooners", "afc"],
@@ -76,7 +92,7 @@ PULSE_API_BASE = "https://sdp-prem-prod.premier-league-prod.pulselive.com/api/v2
 # Competition IDs for Pulse API
 COMPETITION_IDS = {
     "PL": 1,
-    "FA": 1,
+    "FA": 4,
     "EFL": 2,
     "UCL": 5,
     "UEL": 6,
@@ -88,6 +104,11 @@ async def fetch_api_data(session, url, params=None):
     async with session.get(url, params=params) as response:
         response.raise_for_status()
         return await response.json()
+
+# Convenience wrapper for FPL API endpoints
+async def fetch_fpl_data(endpoint: str, params=None):
+    async with aiohttp.ClientSession() as session:
+        return await fetch_api_data(session, f"{FPL_API_BASE}{endpoint}", params)
 
 # Command to display the league table
 @bot.command()
@@ -197,6 +218,17 @@ async def setup_database():
 async def on_ready():
     print(f'{bot.user} has connected to Discord!')
     print(f'Bot is in {len(bot.guilds)} guilds')
+    # Helpful for diagnosing duplicate instances
+    try:
+        import os as _os
+        print(f'Process PID: {_os.getpid()}')
+    except Exception:
+        pass
+    try:
+        # No custom presence needed
+        pass
+    except Exception:
+        pass
     await setup_database()
 
 # Command to say hello
@@ -397,79 +429,167 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
 
     current_time = datetime.now(timezone.utc)
     current_gw = next((event for event in bootstrap['events'] if event['is_current']), None)
+    fpl_fixtures = None
     
     if start_gw is None:
         if current_gw:
-            gw_deadline = datetime.fromisoformat(current_gw['deadline_time'].replace('Z', '+00:00'))
-            if current_time > gw_deadline:
-                start_gw = current_gw['id'] + 1
-            else:
-                start_gw = current_gw['id']
+            # If all fixtures in the current GW are finished, start at the next GW; otherwise include current GW
+            fpl_fixtures = await fetch_fpl_data("fixtures/")
+            has_unfinished = any(
+                (fx.get('event') == current_gw['id']) and (not fx.get('finished', False))
+                for fx in fpl_fixtures
+            )
+            start_gw = current_gw['id'] if has_unfinished else current_gw['id'] + 1
         else:
             start_gw = next(event['id'] for event in bootstrap['events'] if not event['finished'])
 
     end_gw = min(start_gw + num_gameweeks - 1, 38)
     actual_gameweeks = end_gw - start_gw + 1
 
-    fixture_data = {team['short']: [{'opponent': '', 'fdr': 0}] * actual_gameweeks for team in filtered_teams.values()}
+    # Initialize fixture buckets with independent dicts for each GW
+    fixture_data = {
+        team['short']: [
+            {'opponent': '', 'fdr': 0} for _ in range(actual_gameweeks)
+        ]
+        for team in filtered_teams.values()
+    }
     cup_fixture_buckets = defaultdict(list)
 
-    async with aiohttp.ClientSession() as session:
-        tasks = []
-        for month_offset in range(3): # Fetch fixtures for the next 3 months
-            month = (datetime.now().month + month_offset -1) % 12 + 1
-            year = datetime.now().year + (datetime.now().month + month_offset -1) // 12
-            
+    # 1) Populate Premier League fixtures using the official FPL endpoint
+    if fpl_fixtures is None:
+        async with aiohttp.ClientSession() as session:
+            fpl_fixtures = await fetch_api_data(session, f"{FPL_API_BASE}fixtures/")
+
+    for fixture in fpl_fixtures:
+        gw = fixture.get('event')
+        if gw is None or not (start_gw <= gw <= end_gw):
+            continue
+
+        home_id = fixture['team_h']
+        away_id = fixture['team_a']
+        home_short = teams.get(home_id, {}).get('short')
+        away_short = teams.get(away_id, {}).get('short')
+        if not home_short or not away_short:
+            continue
+
+        gw_index = gw - start_gw
+        home_fdr = fixture.get('team_h_difficulty') or 0
+        away_fdr = fixture.get('team_a_difficulty') or 0
+
+        if home_short in fixture_data:
+            fixture_data[home_short][gw_index] = {'opponent': away_short.upper(), 'fdr': home_fdr}
+        if away_short in fixture_data:
+            fixture_data[away_short][gw_index] = {'opponent': home_short.lower(), 'fdr': away_fdr}
+
+    # 2) Optionally enrich with cup fixtures via Pulse API
+    if show_cups:
+        # Use Pulse matches endpoint per competition with kickoff range windows
+        # Build monthly windows spanning the GW date range
+        start_deadline = next(e for e in bootstrap['events'] if e['id'] == start_gw)['deadline_time']
+        end_deadline = next(e for e in bootstrap['events'] if e['id'] == end_gw)['deadline_time']
+        start_dt = datetime.fromisoformat(start_deadline.replace('Z', '+00:00'))
+        end_dt = datetime.fromisoformat(end_deadline.replace('Z', '+00:00'))
+
+        async with aiohttp.ClientSession() as session:
+            tasks = []
+            windows = []
+            # Iterate months covering [start_dt - 7d, end_dt + 1d]
+            probe_start = (start_dt - timedelta(days=7)).replace(day=1)
+            probe_end = (end_dt + timedelta(days=1)).replace(day=1)
+            cursor = probe_start
+            while cursor <= probe_end:
+                year = cursor.year
+                month = cursor.month
+                next_month_year = year + (1 if month == 12 else 0)
+                next_month = 1 if month == 12 else month + 1
+                kick_from = f"{year}-{month:02d}-01"
+                kick_to = f"{next_month_year}-{next_month:02d}-01"
+                windows.append((kick_from, kick_to, year))
+                cursor = cursor.replace(year=next_month_year, month=next_month, day=1)
+
             for comp, comp_id in COMPETITION_IDS.items():
-                params = {
-                    "competition": comp_id,
-                    "season": year,
-                    "kickoff>": f"{year}-{month:02d}-01",
-                    "kickoff<": f"{year}-{(month % 12) + 1:02d}-01",
-                    "_limit": 100
-                }
-                tasks.append(fetch_api_data(session, f"{PULSE_API_BASE}matches", params=params))
-        
-        all_fixtures_data = await asyncio.gather(*tasks)
-
-    for fixtures_page in all_fixtures_data:
-        for fixture in fixtures_page.get('content', []):
-            if fixture['status'] == 'UNPLAYED':
-                home_team_short = team_name_to_short.get(fixture['teams'][0]['team']['name'])
-                away_team_short = team_name_to_short.get(fixture['teams'][1]['team']['name'])
-                
-                if not home_team_short or not away_team_short:
+                if comp == 'PL':
                     continue
+                for kick_from, kick_to, year in windows:
+                    params = {
+                        'competition': comp_id,
+                        'season': year,
+                        'kickoff>': kick_from,
+                        'kickoff<': kick_to,
+                        '_limit': 200
+                    }
+                    print(f"[CUPS][REQ] comp={comp}({comp_id}) params={params}")
+                    tasks.append(fetch_api_data(session, f"{PULSE_API_BASE}matches", params=params))
 
-                kickoff_time = datetime.fromtimestamp(fixture['kickoff']['millis'] / 1000, tz=timezone.utc)
-                gw = next((event['id'] for event in bootstrap['events'] if datetime.fromisoformat(event['deadline_time'].replace('Z', '+00:00')) > kickoff_time), None)
-                
-                if gw and start_gw <= gw <= end_gw:
-                    if fixture['competition']['id'] == COMPETITION_IDS['PL']:
-                        gw_index = gw - start_gw
-                        if home_team_short in fixture_data:
-                            # Placeholder for FDR - Pulse API doesn't provide it
-                            fixture_data[home_team_short][gw_index] = {'opponent': away_team_short.upper(), 'fdr': 3}
-                        if away_team_short in fixture_data:
-                            fixture_data[away_team_short][gw_index] = {'opponent': home_team_short.lower(), 'fdr': 3}
-                    elif show_cups:
-                        cup_fixture_buckets[gw].append({
-                            'team': home_team_short,
-                            'opponent': away_team_short,
-                            'is_home': True,
-                            'competition': next(comp for comp, id in COMPETITION_IDS.items() if id == fixture['competition']['id'])
-                        })
-                        cup_fixture_buckets[gw].append({
-                            'team': away_team_short,
-                            'opponent': home_team_short,
-                            'is_home': False,
-                            'competition': next(comp for comp, id in COMPETITION_IDS.items() if id == fixture['competition']['id'])
-                        })
+            pages = await asyncio.gather(*tasks, return_exceptions=True)
+
+        total = 0
+        for idx, page in enumerate(pages):
+            if isinstance(page, Exception):
+                print(f"[CUPS][ERR] page {idx} error: {page}")
+                continue
+            data = page.get('data') or page.get('content') or []
+            print(f"[CUPS][PAGE] {idx} data_count={len(data)} keys={list(page.keys())[:5]}")
+            total += len(data)
+            for fixture in data:
+                # Period may be 'FullTime' for played matches
+                period = fixture.get('period')
+                if isinstance(period, str) and period.lower() == 'fulltime':
+                    continue
+                home_name = (fixture.get('homeTeam') or {}).get('name')
+                away_name = (fixture.get('awayTeam') or {}).get('name')
+                if not home_name or not away_name:
+                    continue
+                home_short = team_name_to_short.get(home_name)
+                away_short = team_name_to_short.get(away_name)
+                # Only create entries for PL teams so the CUP column appears only when relevant
+                if not home_short and not away_short:
+                    continue
+                kickoff_str = fixture.get('kickoff')
+                if not kickoff_str:
+                    continue
+                try:
+                    kickoff_time = datetime.strptime(kickoff_str, '%Y-%m-%d %H:%M:%S').replace(tzinfo=timezone.utc)
+                except Exception:
+                    # Fallback: use date portion
+                    try:
+                        kickoff_time = datetime.strptime(kickoff_str.split(' ')[0], '%Y-%m-%d').replace(tzinfo=timezone.utc)
+                    except Exception:
+                        continue
+                gw_map = next((event['id'] for event in bootstrap['events'] if datetime.fromisoformat(event['deadline_time'].replace('Z', '+00:00')) > kickoff_time), None)
+                if not gw_map or not (start_gw <= gw_map <= end_gw):
+                    continue
+                comp_id = fixture.get('competitionId') or (fixture.get('competition') and fixture['competition'].get('id'))
+                cup_name = next((name for name, cid in COMPETITION_IDS.items() if cid == int(comp_id) and name != 'PL'), None) if comp_id else None
+                if not cup_name:
+                    continue
+                if home_short:
+                    cup_fixture_buckets[gw_map].append({
+                        'team': home_short,
+                        'opponent': (away_short or abbreviate_team_name(away_name)),
+                        'is_home': True,
+                        'competition': cup_name
+                    })
+                if away_short:
+                    cup_fixture_buckets[gw_map].append({
+                        'team': away_short,
+                        'opponent': (home_short or abbreviate_team_name(home_name)),
+                        'is_home': False,
+                        'competition': cup_name
+                    })
+        print(f"[CUPS][RESP] total_matches={total}")
+        print(f"[CUPS][BUCKETS] gw_keys={sorted(cup_fixture_buckets.keys())} sizes={[len(v) for k,v in sorted(cup_fixture_buckets.items())]}")
 
     team_positions = {team['short_name']: team['position'] for team in bootstrap['teams']}
 
     if sort_method == "table":
         sorted_teams = sorted(fixture_data.keys(), key=lambda x: team_positions.get(x, 999))
+    elif sort_method == "fdr":
+        def team_fdr_score(team_key):
+            fixtures = fixture_data[team_key]
+            # Treat blanks (0) as neutral difficulty 3 to avoid unfairly favoring blanks
+            return sum(f.get('fdr') if f.get('fdr') else 3 for f in fixtures)
+        sorted_teams = sorted(fixture_data.keys(), key=lambda t: (team_fdr_score(t), t))
     else:
         sorted_teams = sorted(fixture_data.keys())
 
@@ -633,6 +753,17 @@ def get_text_color(fixture):
     if fixture['fdr'] >= 4:
         return 'white'
     return 'black'
+
+# Helper for cup opponents: generate a short abbreviation when not a PL team
+def abbreviate_team_name(team_name: str) -> str:
+    if not team_name:
+        return "?"
+    words = [w for w in ''.join(ch if ch.isalnum() or ch.isspace() else ' ' for ch in team_name).split() if w]
+    if len(words) == 1:
+        return words[0][:3].upper()
+    if len(words) == 2:
+        return (words[0][0] + words[1][:2]).upper()
+    return (words[0][0] + words[1][0] + words[2][0]).upper()
 
 # Command to get schedule
 @bot.command()
@@ -994,6 +1125,10 @@ async def get_league(ctx):
         print(f"An error occurred: {str(e)}")
         await ctx.send("An error occurred while fetching the league ID.")
 
-print("Registering commands...")
-print(f"Registered commands: {[command.name for command in bot.commands]}")
-bot.run(TOKEN)
+if __name__ == "__main__":
+    if not acquire_single_instance_lock(49721):
+        print("Another instance of the bot is already running. Exiting.")
+        sys.exit(0)
+    print("Registering commands...")
+    print(f"Registered commands: {[command.name for command in bot.commands]}")
+    bot.run(TOKEN)
