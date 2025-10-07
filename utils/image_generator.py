@@ -1,0 +1,394 @@
+import io
+from PIL import Image, ImageDraw, ImageFont, ImageColor
+
+# Cup colors (duplicated to avoid changing call signatures or cross-module deps)
+CUP_COLORS = {
+    "UCL": "#1A3772",
+    "UEL": "#F25E27",
+    "UECL": "#6CC24A",
+    "EFL": "#1D925F",
+    "FA": "#D70024"
+}
+
+
+def create_table_image(teams):
+    # Define image properties
+    width = 1000
+    height = 50 + len(teams) * 30
+    padding = 10
+    font = ImageFont.truetype("arial.ttf", 16)
+    header_font = ImageFont.truetype("arialbd.ttf", 16)
+
+    # Create image and drawing context
+    image = Image.new('RGB', (width, height), color='white')
+    draw = ImageDraw.Draw(image)
+
+    # Define column widths
+    col_widths = [50, 200, 50, 50, 50, 50, 50, 50, 50, 50]
+    
+    # Draw headers
+    headers = ["Pos", "Team", "Played", "Won", "Drawn", "Lost", "GF", "GA", "GD", "Points"]
+    x = padding
+    for header, col_width in zip(headers, col_widths):
+        draw.text((x, padding), header, font=header_font, fill='black')
+        x += col_width
+
+    # Draw team data
+    for i, team in enumerate(teams):
+        y = 40 + i * 30
+        x = padding
+        row = [
+            str(team['position']),
+            team['name'],
+            str(team['played']),
+            str(team['win']),
+            str(team['draw']),
+            str(team['loss']),
+            str(team.get('goals_for', 'N/A')),
+            str(team.get('goals_against', 'N/A')),
+            str(team.get('goal_difference', 'N/A')),
+            str(team['points'])
+        ]
+        for text, col_width in zip(row, col_widths):
+            draw.text((x, y), text, font=font, fill='black')
+            x += col_width
+
+        # Draw alternating row backgrounds
+        if i % 2 == 0:
+            draw.rectangle([0, y-5, width, y+25], fill='#f0f0f0')
+
+    # Draw horizontal lines
+    for i in range(len(teams) + 1):
+        y = 35 + i * 30
+        draw.line([(0, y), (width, y)], fill='#d0d0d0')
+
+    # Draw vertical lines
+    x = 0
+    for col_width in col_widths:
+        x += col_width
+        draw.line([(x, 0), (x, height)], fill='#d0d0d0')
+
+    return image
+
+
+def get_fixture_color(fixture):
+    if not fixture['opponent']:
+        return 'lightgrey'
+    fdr = fixture['fdr']
+    if fdr == 1:
+        return '#375523'  # Dark Green
+    elif fdr == 2:
+        return '#01FC7A'  # Light Green
+    elif fdr == 3:
+        return '#E7E7E7'  # Grey
+    elif fdr == 4:
+        return '#FF1751'  # Light Red
+    else:
+        return '#80072D'  # Dark Red
+
+
+def get_text_color(fixture):
+    if fixture['fdr'] >= 4:
+        return 'white'
+    return 'black'
+
+
+def fit_text_to_width(draw, text: str, font, max_width: int) -> str:
+    if draw.textlength(text, font=font) <= max_width:
+        return text
+    ellipsis = '…'
+    # Binary search for the longest prefix that fits
+    lo, hi = 0, len(text)
+    best = ''
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        candidate = text[:mid] + ellipsis
+        if draw.textlength(candidate, font=font) <= max_width:
+            best = candidate
+            lo = mid + 1
+        else:
+            hi = mid - 1
+    return best if best else (text[:1] + ellipsis)
+
+
+def wrap_text_to_two_lines(draw, text: str, font, max_width: int):
+    if draw.textlength(text, font=font) <= max_width:
+        return text, ''
+    tokens = text.split()
+    if len(tokens) == 1:
+        # No spaces to wrap; fall back to ellipsis on one line
+        return fit_text_to_width(draw, text, font, max_width), ''
+    line1_tokens = []
+    for token in tokens:
+        test = (' '.join(line1_tokens + [token])).strip()
+        if draw.textlength(test, font=font) <= max_width:
+            line1_tokens.append(token)
+        else:
+            break
+    if not line1_tokens:
+        # First token alone doesn't fit; ellipsize single-line
+        return fit_text_to_width(draw, tokens[0], font, max_width), ''
+    line1 = ' '.join(line1_tokens)
+    remaining = ' '.join(tokens[len(line1_tokens):]).strip()
+    if not remaining:
+        return line1, ''
+    line2 = fit_text_to_width(draw, remaining, font, max_width)
+    return line1, line2
+
+
+def create_fixture_grid(fixture_data, num_gameweeks, start_gw, team_names, gw_dates, sort_method, team_positions, team_points, cup_fixture_buckets):
+    cell_width, cell_height = 100, 30
+    team_column_width = 120
+    position_column_width = 40 if sort_method == "table" else 0
+    points_column_width = 40 if sort_method == "table" else 0
+    spacing = 10
+    padding = 20
+    header_height_small = 25  # Height for Pos, Club, Pts headers
+    header_height_large = 50  # Height for GW headers
+    gap_height = 10  # Gap between headers and data
+    
+    # Calculate total number of columns including cup fixtures
+    total_columns = num_gameweeks + sum(1 for gw in range(start_gw, start_gw + num_gameweeks) if gw in cup_fixture_buckets)
+    
+    width = padding * 2 + position_column_width + team_column_width + points_column_width + spacing + (cell_width * total_columns)
+    height = padding * 2 + header_height_large + gap_height + (cell_height * len(fixture_data))
+    image = Image.new('RGB', (width, height), color='white')
+    draw = ImageDraw.Draw(image)
+    
+    font = ImageFont.truetype("arial.ttf", 16)
+    bold_font = ImageFont.truetype("arialbd.ttf", 16)
+    header_font = ImageFont.truetype("arialbd.ttf", 16)
+    date_font = ImageFont.truetype("arial.ttf", 14)
+    cup_font = ImageFont.truetype("arial.ttf", 12)  # slightly smaller for CUP cells
+    cup_bold_font = ImageFont.truetype("arialbd.ttf", 12)
+    
+    # Draw headers for position, club, and points columns only if sort_method is "table"
+    if sort_method == "table":
+        draw.rectangle([padding, padding + header_height_large - header_height_small, padding + position_column_width, padding + header_height_large], outline='black')
+        draw.text((padding + position_column_width/2, padding + header_height_large - 5), "Pos", font=header_font, fill='black', anchor="mb")
+        
+        draw.rectangle([padding + position_column_width + team_column_width, padding + header_height_large - header_height_small, padding + position_column_width + team_column_width + points_column_width, padding + header_height_large], outline='black')
+        draw.text((padding + position_column_width + team_column_width + points_column_width/2, padding + header_height_large - 5), "Pts", font=header_font, fill='black', anchor="mb")
+    
+    # Draw club header
+    draw.rectangle([padding + position_column_width, padding + header_height_large - header_height_small, padding + position_column_width + team_column_width, padding + header_height_large], outline='black')
+    draw.text((padding + position_column_width + 5, padding + header_height_large - 5), "Club", font=header_font, fill='black', anchor="lb")
+    
+    # Draw headers and dates for gameweeks and cup fixtures
+    column = 0
+    for i in range(num_gameweeks):
+        gw = start_gw + i
+        x = padding + position_column_width + team_column_width + points_column_width + spacing + column * cell_width
+        draw.rectangle([x, padding, x + cell_width, padding + header_height_large], outline='black')
+        draw.text((x + cell_width/2, padding + 10), gw_dates.get(gw, ""), font=date_font, fill='black', anchor="mt")
+        draw.text((x + cell_width/2, padding + header_height_large - 10), f"GW{gw}", font=header_font, fill='black', anchor="mb")
+        column += 1
+        
+        if gw in cup_fixture_buckets:
+            x = padding + position_column_width + team_column_width + points_column_width + spacing + column * cell_width
+            draw.rectangle([x, padding, x + cell_width, padding + header_height_large], fill='lightblue', outline='black')
+            draw.text((x + cell_width/2, padding + header_height_large/2), "CUP", font=header_font, fill='black', anchor="mm")
+            column += 1
+    
+    # Draw team names, positions, points, and fixtures
+    for i, (team_short, fixtures) in enumerate(fixture_data.items()):
+        y = padding + header_height_large + gap_height + i*cell_height
+        team_full = team_names[team_short]
+        
+        # Draw position (in bold) only if sort_method is "table"
+        if sort_method == "table":
+            draw.rectangle([padding, y, padding + position_column_width, y + cell_height], outline='black')
+            draw.text((padding + position_column_width/2, y + cell_height/2), str(team_positions.get(team_short, '')), font=bold_font, fill='black', anchor="mm")
+        
+        # Draw team name (in bold)
+        draw.rectangle([padding + position_column_width, y, padding + position_column_width + team_column_width, y + cell_height], outline='black')
+        draw.text((padding + position_column_width + 5, y + cell_height/2), team_full, font=bold_font, fill='black', anchor="lm")
+        
+        # Draw points (in bold) only if sort_method is "table"
+        if sort_method == "table":
+            draw.rectangle([padding + position_column_width + team_column_width, y, padding + position_column_width + team_column_width + points_column_width, y + cell_height], outline='black')
+            draw.text((padding + position_column_width + team_column_width + points_column_width/2, y + cell_height/2), str(team_points.get(team_short, '')), font=bold_font, fill='black', anchor="mm")
+        
+        column = 0
+        for j in range(num_gameweeks):
+            gw = start_gw + j
+            x = padding + position_column_width + team_column_width + points_column_width + spacing + column * cell_width
+            
+            # Draw league fixture
+            if j < len(fixtures):
+                fixture = fixtures[j]
+                color = get_fixture_color(fixture)
+                draw.rectangle([x, y, x + cell_width, y + cell_height], fill=color, outline='black')
+                
+                is_home = fixture['opponent'].isupper()
+                text_font = bold_font if is_home else font
+                
+                draw.text((x + cell_width/2, y + cell_height/2), fixture['opponent'], font=text_font, fill='black', anchor="mm")
+            else:
+                draw.rectangle([x, y, x + cell_width, y + cell_height], fill='white', outline='black')
+            
+            column += 1
+            
+            # Draw cup fixture if exists
+            if gw in cup_fixture_buckets:
+                x = padding + position_column_width + team_column_width + points_column_width + spacing + column * cell_width
+                
+                cup_fixture = next((f for f in cup_fixture_buckets[gw] if f['team'] == team_short), None)
+                if cup_fixture:
+                    cup_color = CUP_COLORS.get(cup_fixture['competition'], 'lightblue')  # Default to lightblue if competition not found
+                    draw.rectangle([x, y, x + cell_width, y + cell_height], fill=cup_color, outline='black')
+                    
+                    # Use full opponent name if available; otherwise use existing opponent text
+                    opponent_key = cup_fixture.get('opponent_full') or cup_fixture['opponent']
+                    display_text = opponent_key
+                    text_font = cup_bold_font if cup_fixture['is_home'] else cup_font
+                    
+                    # Determine text color based on background color brightness
+                    bg_color = ImageColor.getrgb(cup_color)
+                    brightness = (bg_color[0] * 299 + bg_color[1] * 587 + bg_color[2] * 114) / 1000
+                    text_color = 'black' if brightness > 128 else 'white'
+                    
+                    # Wrap into up to two lines within the cell
+                    max_text_width = cell_width - 8
+                    line1, line2 = wrap_text_to_two_lines(draw, display_text, text_font, max_text_width)
+                    if line2:
+                        ascent, descent = text_font.getmetrics()
+                        line_height = ascent + descent
+                        gap_px = max(1, int(line_height * 0.15))
+                        total_h = line_height * 2 + gap_px
+                        top_y = y + (cell_height - total_h) / 2
+                        y1 = top_y + line_height / 2
+                        y2 = y1 + line_height + gap_px
+                        draw.text((x + cell_width/2, y1), line1, font=text_font, fill=text_color, anchor="mm")
+                        draw.text((x + cell_width/2, y2), line2, font=text_font, fill=text_color, anchor="mm")
+                    else:
+                        fitted = fit_text_to_width(draw, line1, text_font, max_text_width)
+                        draw.text((x + cell_width/2, y + cell_height/2), fitted, font=text_font, fill=text_color, anchor="mm")
+                else:
+                    draw.rectangle([x, y, x + cell_width, y + cell_height], fill='lightblue', outline='black')
+                
+                column += 1
+    
+    # Draw gridlines for fixture columns only
+    for i in range(total_columns + 1):
+        x = padding + position_column_width + team_column_width + points_column_width + spacing + i*cell_width
+        draw.line([(x, padding + header_height_large + gap_height), (x, height - padding)], fill='black', width=1)
+    
+    # Draw horizontal gridlines for team rows only, starting below the first team
+    for i in range(1, len(fixture_data) + 1):
+        y = padding + header_height_large + gap_height + i*cell_height
+        draw.line([(padding, y), (padding + position_column_width + team_column_width + points_column_width, y)], fill='black', width=1)
+        draw.line([(padding + position_column_width + team_column_width + points_column_width + spacing, y), (width - padding, y)], fill='black', width=1)
+    
+    # Draw vertical lines for position and points columns, but not connecting to the header boxes
+    draw.line([(padding + position_column_width, padding + header_height_large + gap_height), (padding + position_column_width, height - padding)], fill='black', width=1)
+    draw.line([(padding + position_column_width + team_column_width, padding + header_height_large + gap_height), (padding + position_column_width + team_column_width, height - padding)], fill='black', width=1)
+    
+    return image
+
+
+def create_leaderboard_image(standings):
+    width, height = 1300, 70 + len(standings) * 60
+    image = Image.new('RGB', (width, height), color='white')
+    draw = ImageDraw.Draw(image)
+    
+    font_regular = ImageFont.load_default().font_variant(size=24)
+    font_bold = ImageFont.load_default().font_variant(size=24)
+    font_header = ImageFont.load_default().font_variant(size=28)
+    
+    # Define column widths
+    rank_width = 90
+    team_width = 450
+    gw_width = 90
+    tot_width = 90
+    value_width = 100
+    or_width = 100
+    
+    # Define column widths and positions
+    rank_center = rank_width // 2
+    team_start = rank_width + 20
+    gw_center = width - or_width - value_width - tot_width - gw_width // 2
+    tot_center = width - or_width - value_width - tot_width // 2
+    value_center = width - or_width - value_width // 2
+    or_center = width - or_width // 2
+    
+    # Adjust header vertical position
+    header_y = 40  # Moved down from 20
+    
+    # Draw headers
+    draw.text((rank_center, header_y), "Rank", font=font_header, fill='black', anchor="mm")
+    draw.text((team_start, header_y), "Team & Manager", font=font_header, fill='black', anchor="lm")
+    draw.text((gw_center, header_y), "GW", font=font_header, fill='black', anchor="mm")
+    draw.text((tot_center, header_y), "TOT", font=font_header, fill='black', anchor="mm")
+    draw.text((value_center, header_y), "Value", font=font_header, fill='black', anchor="mm")
+    draw.text((or_center, header_y), "OR", font=font_header, fill='black', anchor="mm")
+    
+    # Draw header underline (moved closer to headers)
+    draw.line([(0, header_y + 25), (width, header_y + 25)], fill='black', width=2)
+    
+    def draw_slightly_bold_text(x, y, text, font, fill='black'):
+        # Draw the text twice with a slight offset for a slightly bolder effect
+        draw.text((x, y), text, font=font, fill=fill, anchor="lm")
+        draw.text((x+1, y), text, font=font, fill=fill, anchor="lm")
+    
+    # Adjust the starting y-coordinate for the standings
+    standings_start_y = header_y + 35
+    
+    # Draw standings
+    for i, entry in enumerate(standings):
+        y = standings_start_y + i * 60
+        row_center = y + 30
+        
+        # Calculate positions for rank and indicator
+        rank_text_width = draw.textlength(str(entry['rank']), font=font_regular)
+        indicator_width = 20
+        total_width = rank_text_width + indicator_width + 5  # 5 px spacing
+        start_x = rank_center - total_width // 2
+        
+        # Draw rank
+        draw.text((start_x, row_center), str(entry['rank']), font=font_regular, fill='black', anchor="lm")
+        
+        # Draw arrow or indicator
+        indicator_x = start_x + rank_text_width + 5
+        indicator_y = row_center
+        if entry['rank'] < entry['last_rank']:
+            draw.polygon([(indicator_x, indicator_y + 6), (indicator_x + 10, indicator_y - 6), (indicator_x + 20, indicator_y + 6)], fill='green')
+        elif entry['rank'] > entry['last_rank']:
+            draw.polygon([(indicator_x, indicator_y - 6), (indicator_x + 10, indicator_y + 6), (indicator_x + 20, indicator_y - 6)], fill='red')
+        else:
+            draw.rectangle([(indicator_x, indicator_y - 4), (indicator_x + 20, indicator_y + 4)], fill='grey')
+        
+        # Draw team name (slightly bold) and manager name (regular)
+        draw_slightly_bold_text(team_start, row_center - 12, entry.get('entry_name', 'Unknown'), font_bold)
+        draw.text((team_start, row_center + 12), entry.get('player_name', 'Unknown'), font=font_regular, fill='black', anchor="lm")
+        
+        # Draw GW and TOT scores
+        draw.text((gw_center, row_center), str(entry.get('event_total', 'N/A')), font=font_regular, fill='black', anchor="mm")
+        draw.text((tot_center, row_center), str(entry.get('total', 'N/A')), font=font_regular, fill='black', anchor="mm")
+        
+        # Draw Team Value
+        team_value = entry.get('value', 0) / 10  # Assuming value is in tenths of millions
+        draw.text((value_center, row_center), f"{team_value:.1f}m", font=font_regular, fill='black', anchor="mm")
+        
+        # Draw Overall Rank
+        overall_rank = entry.get('overall_rank', 'N/A')
+        if isinstance(overall_rank, int):
+            if overall_rank >= 1000000:
+                overall_rank_text = f"{overall_rank/1000000:.1f}M"
+            elif overall_rank >= 1000:
+                overall_rank_text = f"{overall_rank/1000:.1f}K"
+            else:
+                overall_rank_text = f"{overall_rank}"
+        else:
+            overall_rank_text = str(overall_rank)
+        draw.text((or_center, row_center), overall_rank_text, font=font_regular, fill='black', anchor="mm")
+        
+        # Draw row separator
+        draw.line([(0, y + 59), (width, y + 59)], fill='lightgray', width=1)
+    
+    img_byte_arr = io.BytesIO()
+    image.save(img_byte_arr, format='PNG')
+    img_byte_arr.seek(0)
+    return img_byte_arr
+
+
