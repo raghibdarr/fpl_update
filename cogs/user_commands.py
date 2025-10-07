@@ -8,7 +8,7 @@ class UserCommands(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @commands.command()
+    @commands.hybrid_command(name="link", description="Link your Discord to an FPL ID")
     async def link(self, ctx: commands.Context, fpl_id: int | None = None):
         if fpl_id is None:
             await ctx.send("Please provide your FPL ID. Usage: !link <your_fpl_id>")
@@ -20,7 +20,7 @@ class UserCommands(commands.Cog):
         except Exception:
             await ctx.send("An error occurred while linking your account. Please check your FPL ID and try again.")
 
-    @commands.command()
+    @commands.hybrid_command(name="myteam", description="Show your linked FPL team")
     async def myteam(self, ctx: commands.Context):
         try:
             result = await get_user_by_discord_id(ctx.author.id)
@@ -32,7 +32,7 @@ class UserCommands(commands.Cog):
         except Exception:
             await ctx.send("An error occurred while fetching your team information.")
 
-    @commands.command()
+    @commands.hybrid_command(name="mypoints", description="Show your total FPL points")
     async def mypoints(self, ctx: commands.Context):
         try:
             result = await get_user_by_discord_id(ctx.author.id)
@@ -45,7 +45,7 @@ class UserCommands(commands.Cog):
         except Exception:
             await ctx.send("An error occurred while fetching your points.")
 
-    @commands.command()
+    @commands.hybrid_command(name="set_league", description="Set this guild's league ID")
     async def set_league(self, ctx: commands.Context, league_id: int):
         try:
             await upsert_league(ctx.guild.id, league_id)
@@ -53,7 +53,7 @@ class UserCommands(commands.Cog):
         except Exception:
             await ctx.send("An error occurred while setting the league ID.")
 
-    @commands.command()
+    @commands.hybrid_command(name="get_league", description="Get this guild's league ID")
     async def get_league(self, ctx: commands.Context):
         try:
             league_id = await get_league_id_for_guild(ctx.guild.id)

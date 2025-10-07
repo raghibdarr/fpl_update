@@ -1,7 +1,7 @@
 import io
 import discord
 from discord.ext import commands
-from discord import Embed, Color
+from discord import Embed, Color, app_commands
 from datetime import datetime, timezone
 from collections import defaultdict
 
@@ -16,7 +16,7 @@ class FPLCommands(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @commands.command()
+    @commands.hybrid_command(name="table", description="Show the Premier League table")
     async def table(self, ctx: commands.Context):
         try:
             data = await fetch_fpl_data("bootstrap-static/")
@@ -29,7 +29,7 @@ class FPLCommands(commands.Cog):
         except Exception as e:
             await ctx.send(f"An error occurred: {str(e)}")
 
-    @commands.command()
+    @commands.hybrid_command(name="fixtures", description="Show fixture grid")
     async def fixtures(self, ctx: commands.Context, *, args: str = ""):
         params = args.split()
         num_gameweeks = 6
@@ -96,7 +96,7 @@ class FPLCommands(commands.Cog):
         except Exception as e:
             await ctx.send(f"An error occurred: {str(e)}")
 
-    @commands.command()
+    @commands.hybrid_command(name="schedule", description="Show upcoming fixtures for a team or next GW")
     async def schedule(self, ctx: commands.Context, *, team_name: str | None = None):
         try:
             fixtures_data = await fetch_fpl_data("fixtures/")

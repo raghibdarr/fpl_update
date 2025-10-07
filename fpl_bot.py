@@ -72,6 +72,25 @@ async def setup_hook():
     await bot.load_extension('cogs.fpl_commands')
     await bot.load_extension('cogs.league_commands')
     await bot.load_extension('cogs.user_commands')
+    # Dev-guild-only slash sync for instant availability
+    dev_guild_id = os.getenv('DEV_GUILD_ID')
+    if dev_guild_id:
+        try:
+            guild = discord.Object(id=int(dev_guild_id))
+            # Copy global commands into the dev guild for instant visibility
+            bot.tree.copy_global_to(guild=guild)
+            await bot.tree.sync(guild=guild)
+            print(f"Slash commands synced to dev guild {dev_guild_id}")
+        except Exception as e:
+            print(f"Dev guild slash sync failed: {e}")
+    # Optional global sync for rollout (propagation can take minutes)
+    sync_global = os.getenv('SYNC_GLOBAL', '').lower() in ('1', 'true', 'yes')
+    if sync_global:
+        try:
+            await bot.tree.sync()
+            print("Global slash commands synced")
+        except Exception as e:
+            print(f"Global slash sync failed: {e}")
 
 # Ensure only a single instance of the bot runs per machine
 _singleton_socket = None

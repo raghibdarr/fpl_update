@@ -11,7 +11,7 @@ class LeagueCommands(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    @commands.command()
+    @commands.hybrid_command(name="leaderboard", description="Show league leaderboard image")
     async def leaderboard(self, ctx: commands.Context):
         try:
             league_id = await get_league_id_for_guild(ctx.guild.id)
