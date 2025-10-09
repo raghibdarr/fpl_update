@@ -47,5 +47,3 @@ async def get_league_id_for_guild(guild_id: int):
         async with db.execute('SELECT league_id FROM leagues WHERE guild_id = ?', (guild_id,)) as cursor:
             row = await cursor.fetchone()
             return row[0] if row else None
-
-

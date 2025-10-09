@@ -14,5 +14,3 @@ async def fetch_api_data(session, url, params=None):
 async def fetch_fpl_data(endpoint: str, params=None):
     async with aiohttp.ClientSession() as session:
         return await fetch_api_data(session, f"{FPL_API_BASE}{endpoint}", params)
-
-

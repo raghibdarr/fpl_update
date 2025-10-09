@@ -6,10 +6,7 @@ from typing import Dict, List, Tuple, Any, Set
 import os
 from PIL import Image
 from utils.image_generator import create_squad_image
-try:
-    import cairosvg  # type: ignore
-except Exception:
-    cairosvg = None
+# Removed cairosvg import
 
 
 async def fetch_user_team_name(fpl_id: int) -> str:
@@ -20,7 +17,6 @@ async def fetch_user_team_name(fpl_id: int) -> str:
 async def fetch_user_total_points(fpl_id: int) -> int:
     user_data = await fetch_fpl_data(f"entry/{fpl_id}/")
     return user_data['summary_overall_points']
-
 
 
 async def _current_event_and_bootstrap() -> Tuple[Dict[str, Any], Dict[str, Any]]:
@@ -71,35 +67,16 @@ def _group_starters_by_line(picks: List[Dict[str, Any]], elements_by_id: Dict[in
 
 
 async def _fetch_pitch_image() -> Image.Image | None:
-    """Load the pitch SVG from local utils/pitch.svg if present; otherwise fetch from the FPL URL.
-
-    Requires cairosvg. Returns a PIL RGBA image or None on failure.
-    """
-    if cairosvg is None:
-        return None
-    # 1) Try local cached SVG
-    local_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'utils', 'pitch.svg')
+    """Load the pitch image from local utils/pitch.png if present, or return None."""
+    local_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'utils', 'pitch.png')
     try:
+        # Try local cached PNG as requested by the user
         if os.path.exists(local_path):
-            with open(local_path, 'rb') as f:
-                svg_bytes = f.read()
-            png_bytes = cairosvg.svg2png(bytestring=svg_bytes)
-            return Image.open(io.BytesIO(png_bytes)).convert('RGBA')
+            return Image.open(local_path).convert('RGBA')
     except Exception:
         pass
 
-    # 2) Fallback to remote URL
-    url = "https://fantasy.premierleague.com/assets/pitch-graphic-t77-OTdp.svg"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as resp:
-                if resp.status != 200:
-                    return None
-                svg_bytes = await resp.read()
-        png_bytes = cairosvg.svg2png(bytestring=svg_bytes)
-        return Image.open(io.BytesIO(png_bytes)).convert('RGBA')
-    except Exception:
-        return None
+    return None
 
 
 async def build_myteam_image(fpl_id: int, team_name: str | None = None) -> Image.Image:
@@ -148,4 +125,3 @@ async def build_myteam_image(fpl_id: int, team_name: str | None = None) -> Image
         active_chip=active_chip,
         pitch_image=pitch_image,
     )
-

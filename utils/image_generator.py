@@ -118,7 +118,7 @@ def wrap_text_to_two_lines(draw, text: str, font, max_width: int):
     tokens = text.split()
     if len(tokens) == 1:
         # No spaces to wrap; fall back to ellipsis on one line
-        return fit_text_to_width(draw, text, font, max_width), ''
+        return fit_text_to_width(draw, tokens[0], font, max_width), ''
     line1_tokens = []
     for token in tokens:
         test = (' '.join(line1_tokens + [token])).strip()
@@ -393,7 +393,6 @@ def create_leaderboard_image(standings):
     return img_byte_arr
 
 
-
 def _safe_font(name: str, size: int):
     try:
         return ImageFont.truetype(name, size)
@@ -449,8 +448,8 @@ def create_squad_image(
     # Fonts
     title_font = _safe_font('arialbd.ttf', 42)
     sub_font = _safe_font('arial.ttf', 26)
-    name_font = _safe_font('arialbd.ttf', 24)
-    pts_font = _safe_font('arialbd.ttf', 26)
+    name_font = _safe_font('arialbd.ttf', 20)
+    pts_font = _safe_font('arialbd.ttf', 20)
 
     # Header
     header_h = 180
@@ -470,11 +469,33 @@ def create_squad_image(
     pitch_y1 = H - 248
     pitch_rect = [28, pitch_y0, W - 28, pitch_y1]
     draw.rounded_rectangle(pitch_rect, radius=24, fill='#0b6a34')
-    # If an FPL pitch asset was provided, paste it scaled to fit
+    # If a pitch image was provided, paste it scaled to fit
     if pitch_image is not None:
         pr_w = pitch_rect[2] - pitch_rect[0]
         pr_h = pitch_rect[3] - pitch_rect[1]
-        scaled = pitch_image.resize((pr_w, pr_h))
+        
+        # Resize to fill the pitch area (Cover effect)
+        img_w, img_h = pitch_image.size
+        target_aspect = pr_w / pr_h
+        image_aspect = img_w / img_h
+
+        if image_aspect > target_aspect:
+            # Image is wider than target, resize by height, crop sides
+            new_h = pr_h
+            new_w = int(image_aspect * new_h)
+            x_offset = (new_w - pr_w) // 2
+            y_offset = 0
+            scaled = pitch_image.resize((new_w, new_h), Image.LANCZOS)
+            scaled = scaled.crop((x_offset, y_offset, x_offset + pr_w, y_offset + pr_h))
+        else:
+            # Image is taller than target, resize by width, crop top/bottom
+            new_w = pr_w
+            new_h = int(new_w / image_aspect)
+            x_offset = 0
+            y_offset = (new_h - pr_h) // 2
+            scaled = pitch_image.resize((new_w, new_h), Image.LANCZOS)
+            scaled = scaled.crop((x_offset, y_offset, x_offset + pr_w, y_offset + pr_h))
+
         # Mask to keep rounded corners
         mask = Image.new('L', (pr_w, pr_h), 0)
         ImageDraw.Draw(mask).rounded_rectangle([0, 0, pr_w, pr_h], radius=24, fill=255)
@@ -487,51 +508,60 @@ def create_squad_image(
     fwd_y = mid_y + 222
     bench_y = pitch_y1 + 22
 
+    # Card layout constants (fixed pixels; tune as desired)
+    CARD_W = 129
+    CARD_H = 180
+    TOP_GAP = 10        # space above kit
+    NAME_H = 29         # player name bar height
+    PTS_H = 29          # points bar height
+    KIT_MAX_W = CARD_W - 14
+    KIT_H = 160
+
     def draw_player(cx: int, cy: int, pick: Dict[str, Any], bench_mode: bool):
         el = elements_by_id[pick['element']]
         team = teams_by_id[el['team']]
         team_code = team['code']
         shirt = shirts_by_team_code.get(team_code)
-        # Glass card behind player (reduced size by ~20% width, ~10% height)
-        base_w = 170 if not bench_mode else 150
-        base_h = 210 if not bench_mode else 185
-        card_w = int(base_w * 0.8)
-        card_h = int(base_h * 0.9)
+
+        # Fixed card size/position (centered on cx, cy)
+        card_w = CARD_W
+        card_h = CARD_H
         card_x = cx - card_w // 2
-        card_y = cy - 120
+        card_y = cy - card_h // 2
+
         # Shadow layer
         shadow = Image.new('RGBA', (card_w, card_h), (0, 0, 0, 0))
         sd = ImageDraw.Draw(shadow)
         sd.rounded_rectangle([0, 0, card_w, card_h], radius=20, fill=(0, 0, 0, 120))
         shadow = shadow.filter(ImageFilter.GaussianBlur(8))
         bg.alpha_composite(shadow, (card_x, card_y + 6))
+        
         # Glass rectangle
         glass = Image.new('RGBA', (card_w, card_h), (255, 255, 255, 48))
         gd = ImageDraw.Draw(glass)
         gd.rounded_rectangle([0, 0, card_w - 1, card_h - 1], radius=20, outline=(255, 255, 255, 90), width=2)
         bg.alpha_composite(glass, (card_x, card_y))
 
-        # Compute relative bands within the card
-        top_gap = int(card_h * 0.10)
-        name_h = max(20, int(card_h * 0.20))
-        pts_h = max(20, int(card_h * 0.20))
-        # Place both bars at the bottom with no side/bottom gaps
-        pts_y = card_y + card_h - pts_h
-        name_y = pts_y - name_h  # stacked directly above points
+        # Fixed bars placement
+        pts_y = card_y + card_h - PTS_H
+        name_y = pts_y - NAME_H
 
-        # Shirt sizing: fills between top_gap and pts_y, maintaining aspect ratio
+        # Shirt sizing: fixed target height with max width, keeping aspect ratio
         if shirt:
-            # Crop transparent borders and scale aggressively so shirt dominates the card,
-            # allowing name/points bars to overlay the lower portion (like official app).
-            s = _crop_transparent_borders(shirt)
-            # Scale to exceed card height slightly (e.g., 115%) to create overlap effect
-            target_h = int(card_h * 1.15)
-            target_w = int(card_w * 1.05)
-            s = s.copy()
-            s.thumbnail((target_w, target_h), Image.LANCZOS)
-            sx = cx - s.width // 2
-            # Align near top gap but allow bleed above to keep chest area prominent
-            sy = card_y + max(0, int(card_h * 0.02))
+            s = _crop_transparent_borders(shirt).copy()
+            # scale primarily to fixed height
+            scale_h = KIT_H / s.height
+            tw = int(s.width * scale_h)
+            th = KIT_H
+            # if too wide, cap to max width and scale height accordingly
+            if tw > KIT_MAX_W:
+                scale_w = KIT_MAX_W / s.width
+                tw = KIT_MAX_W
+                th = int(s.height * scale_w)
+            s = s.resize((tw, th), Image.LANCZOS)
+
+            sx = card_x + (card_w - tw) // 2
+            sy = card_y + TOP_GAP
             bg.alpha_composite(s, (sx, sy))
 
         # Name bar (white rounded rect with theme purple text) over the kit
@@ -539,29 +569,31 @@ def create_squad_image(
         theme_purple = '#37003C'
         name_x1 = card_x
         name_x2 = card_x + card_w
-        draw.rectangle([name_x1, name_y, name_x2, name_y + name_h], fill='white')
+        draw.rectangle([name_x1, name_y, name_x2, name_y + NAME_H], fill='white')
         max_name_w = name_x2 - name_x1 - 12
         fitted = fit_text_to_width(draw, name, name_font, max_name_w)
         # vertical centering for name text
         name_tb = draw.textbbox((0, 0), fitted, font=name_font)
         name_th = name_tb[3] - name_tb[1]
-        _centered(draw, fitted, name_font, cx, int(name_y + (name_h - name_th) / 2), theme_purple)
+        _centered(draw, fitted, name_font, (name_x1 + name_x2) // 2, int(name_y + (NAME_H - name_th) / 2), theme_purple)
 
         # Points bar (full width, stacked under the name bar) over the kit
         raw_pts = live_points.get(el['id'], 0)
         shown_pts = raw_pts if bench_mode else raw_pts * max(1, pick.get('multiplier', 0))
         pts_x1 = card_x
         pts_x2 = card_x + card_w
-        draw.rectangle([pts_x1, pts_y, pts_x2, pts_y + pts_h], fill='#512379')
+        draw.rectangle([pts_x1, pts_y, pts_x2, pts_y + PTS_H], fill='#37003c')
         pts_text = str(shown_pts)
         pts_tb = draw.textbbox((0, 0), pts_text, font=pts_font)
         pts_th = pts_tb[3] - pts_tb[1]
-        _centered(draw, pts_text, pts_font, (pts_x1 + pts_x2) // 2, int(pts_y + (pts_h - pts_th) / 2), 'white')
+        _centered(draw, pts_text, pts_font, (pts_x1 + pts_x2) // 2, int(pts_y + (PTS_H - pts_th) / 2), 'white')
 
         # C / V badge
         if el['id'] == captain_id or el['id'] == vice_id:
             badge = 'C' if el['id'] == captain_id else 'V'
-            bx, by, r = cx + 38, cy - 92, 16
+            bx = card_x + card_w - 24
+            by = card_y + 24
+            r = 16
             draw.ellipse([bx - r, by - r, bx + r, by + r], fill='#ffd000')
             _centered(draw, badge, _safe_font('arialbd.ttf', 18), bx, by - 11, 'black')
 
