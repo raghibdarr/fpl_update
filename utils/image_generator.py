@@ -1,5 +1,5 @@
 import io
-from PIL import Image, ImageDraw, ImageFont, ImageColor
+from PIL import Image, ImageDraw, ImageFont, ImageColor, ImageFilter
 from typing import Dict, List, Any, Optional
 
 # Cup colors (duplicated to avoid changing call signatures or cross-module deps)
@@ -414,6 +414,17 @@ def _row_x_positions(width: int, count: int, margin: int = 80) -> List[int]:
     return [margin + step * (i + 1) for i in range(count)]
 
 
+def _crop_transparent_borders(image: Image.Image) -> Image.Image:
+    """Crop fully transparent padding to allow scaling shirts bigger without excess margins."""
+    if image.mode != 'RGBA':
+        image = image.convert('RGBA')
+    alpha = image.split()[3]
+    bbox = alpha.getbbox()
+    if bbox:
+        return image.crop(bbox)
+    return image
+
+
 def create_squad_image(
     *,
     team_name: str,
@@ -428,10 +439,11 @@ def create_squad_image(
     vice_id: Optional[int],
     shirts_by_team_code: Dict[int, Image.Image],
     active_chip: Optional[str] = None,
+    pitch_image: Optional[Image.Image] = None,
 ) -> Image.Image:
     # Canvas and colors approx. to FPL app theme
-    W, H = 1080, 1640
-    bg = Image.new('RGB', (W, H), '#190028')
+    W, H = 880, 1460
+    bg = Image.new('RGBA', (W, H), '#190028')
     draw = ImageDraw.Draw(bg)
 
     # Fonts
@@ -455,36 +467,96 @@ def create_squad_image(
 
     # Pitch background
     pitch_y0 = header_h + 10
-    pitch_y1 = H - 260
-    draw.rounded_rectangle([28, pitch_y0, W - 28, pitch_y1], radius=24, fill='#0b6a34')
+    pitch_y1 = H - 248
+    pitch_rect = [28, pitch_y0, W - 28, pitch_y1]
+    draw.rounded_rectangle(pitch_rect, radius=24, fill='#0b6a34')
+    # If an FPL pitch asset was provided, paste it scaled to fit
+    if pitch_image is not None:
+        pr_w = pitch_rect[2] - pitch_rect[0]
+        pr_h = pitch_rect[3] - pitch_rect[1]
+        scaled = pitch_image.resize((pr_w, pr_h))
+        # Mask to keep rounded corners
+        mask = Image.new('L', (pr_w, pr_h), 0)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, pr_w, pr_h], radius=24, fill=255)
+        bg.paste(scaled.convert('RGBA'), (pitch_rect[0], pitch_rect[1]), mask)
 
     # Row Y positions
-    gk_y = pitch_y0 + 120
-    def_y = gk_y + 220
-    mid_y = def_y + 220
-    fwd_y = mid_y + 220
-    bench_y = pitch_y1 + 20
+    gk_y = pitch_y0 + 126
+    def_y = gk_y + 222
+    mid_y = def_y + 222
+    fwd_y = mid_y + 222
+    bench_y = pitch_y1 + 22
 
     def draw_player(cx: int, cy: int, pick: Dict[str, Any], bench_mode: bool):
         el = elements_by_id[pick['element']]
         team = teams_by_id[el['team']]
         team_code = team['code']
         shirt = shirts_by_team_code.get(team_code)
+        # Glass card behind player (reduced size by ~20% width, ~10% height)
+        base_w = 170 if not bench_mode else 150
+        base_h = 210 if not bench_mode else 185
+        card_w = int(base_w * 0.8)
+        card_h = int(base_h * 0.9)
+        card_x = cx - card_w // 2
+        card_y = cy - 120
+        # Shadow layer
+        shadow = Image.new('RGBA', (card_w, card_h), (0, 0, 0, 0))
+        sd = ImageDraw.Draw(shadow)
+        sd.rounded_rectangle([0, 0, card_w, card_h], radius=20, fill=(0, 0, 0, 120))
+        shadow = shadow.filter(ImageFilter.GaussianBlur(8))
+        bg.alpha_composite(shadow, (card_x, card_y + 6))
+        # Glass rectangle
+        glass = Image.new('RGBA', (card_w, card_h), (255, 255, 255, 48))
+        gd = ImageDraw.Draw(glass)
+        gd.rounded_rectangle([0, 0, card_w - 1, card_h - 1], radius=20, outline=(255, 255, 255, 90), width=2)
+        bg.alpha_composite(glass, (card_x, card_y))
+
+        # Compute relative bands within the card
+        top_gap = int(card_h * 0.10)
+        name_h = max(20, int(card_h * 0.20))
+        pts_h = max(20, int(card_h * 0.20))
+        # Place both bars at the bottom with no side/bottom gaps
+        pts_y = card_y + card_h - pts_h
+        name_y = pts_y - name_h  # stacked directly above points
+
+        # Shirt sizing: fills between top_gap and pts_y, maintaining aspect ratio
         if shirt:
-            s = shirt.resize((120, 120))
-            bg.paste(s, (cx - 60, cy - 106), s)
+            # Crop transparent borders and scale aggressively so shirt dominates the card,
+            # allowing name/points bars to overlay the lower portion (like official app).
+            s = _crop_transparent_borders(shirt)
+            # Scale to exceed card height slightly (e.g., 115%) to create overlap effect
+            target_h = int(card_h * 1.15)
+            target_w = int(card_w * 1.05)
+            s = s.copy()
+            s.thumbnail((target_w, target_h), Image.LANCZOS)
+            sx = cx - s.width // 2
+            # Align near top gap but allow bleed above to keep chest area prominent
+            sy = card_y + max(0, int(card_h * 0.02))
+            bg.alpha_composite(s, (sx, sy))
 
-        # Name label
+        # Name bar (white rounded rect with theme purple text) over the kit
         name = el['web_name']
-        _centered(draw, name, name_font, cx, cy + 24, 'white')
+        theme_purple = '#37003C'
+        name_x1 = card_x
+        name_x2 = card_x + card_w
+        draw.rectangle([name_x1, name_y, name_x2, name_y + name_h], fill='white')
+        max_name_w = name_x2 - name_x1 - 12
+        fitted = fit_text_to_width(draw, name, name_font, max_name_w)
+        # vertical centering for name text
+        name_tb = draw.textbbox((0, 0), fitted, font=name_font)
+        name_th = name_tb[3] - name_tb[1]
+        _centered(draw, fitted, name_font, cx, int(name_y + (name_h - name_th) / 2), theme_purple)
 
-        # Points chip
+        # Points bar (full width, stacked under the name bar) over the kit
         raw_pts = live_points.get(el['id'], 0)
         shown_pts = raw_pts if bench_mode else raw_pts * max(1, pick.get('multiplier', 0))
-        tag_w, tag_h = 80, 34
-        rx, ry = cx - tag_w // 2, cy + 56
-        draw.rounded_rectangle([rx, ry, rx + tag_w, ry + tag_h], radius=10, fill='#512379')
-        _centered(draw, str(shown_pts), pts_font, cx, ry + 5, 'white')
+        pts_x1 = card_x
+        pts_x2 = card_x + card_w
+        draw.rectangle([pts_x1, pts_y, pts_x2, pts_y + pts_h], fill='#512379')
+        pts_text = str(shown_pts)
+        pts_tb = draw.textbbox((0, 0), pts_text, font=pts_font)
+        pts_th = pts_tb[3] - pts_tb[1]
+        _centered(draw, pts_text, pts_font, (pts_x1 + pts_x2) // 2, int(pts_y + (pts_h - pts_th) / 2), 'white')
 
         # C / V badge
         if el['id'] == captain_id or el['id'] == vice_id:

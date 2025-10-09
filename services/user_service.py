@@ -3,8 +3,13 @@ import asyncio
 import aiohttp
 import io
 from typing import Dict, List, Tuple, Any, Set
+import os
 from PIL import Image
 from utils.image_generator import create_squad_image
+try:
+    import cairosvg  # type: ignore
+except Exception:
+    cairosvg = None
 
 
 async def fetch_user_team_name(fpl_id: int) -> str:
@@ -65,6 +70,38 @@ def _group_starters_by_line(picks: List[Dict[str, Any]], elements_by_id: Dict[in
     return lines
 
 
+async def _fetch_pitch_image() -> Image.Image | None:
+    """Load the pitch SVG from local utils/pitch.svg if present; otherwise fetch from the FPL URL.
+
+    Requires cairosvg. Returns a PIL RGBA image or None on failure.
+    """
+    if cairosvg is None:
+        return None
+    # 1) Try local cached SVG
+    local_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'utils', 'pitch.svg')
+    try:
+        if os.path.exists(local_path):
+            with open(local_path, 'rb') as f:
+                svg_bytes = f.read()
+            png_bytes = cairosvg.svg2png(bytestring=svg_bytes)
+            return Image.open(io.BytesIO(png_bytes)).convert('RGBA')
+    except Exception:
+        pass
+
+    # 2) Fallback to remote URL
+    url = "https://fantasy.premierleague.com/assets/pitch-graphic-t77-OTdp.svg"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                if resp.status != 200:
+                    return None
+                svg_bytes = await resp.read()
+        png_bytes = cairosvg.svg2png(bytestring=svg_bytes)
+        return Image.open(io.BytesIO(png_bytes)).convert('RGBA')
+    except Exception:
+        return None
+
+
 async def build_myteam_image(fpl_id: int, team_name: str | None = None) -> Image.Image:
     current_event, bootstrap = await _current_event_and_bootstrap()
     event_id = current_event['id']
@@ -94,6 +131,7 @@ async def build_myteam_image(fpl_id: int, team_name: str | None = None) -> Image
     team_ids = {elements_by_id[p['element']]['team'] for p in picks}
     team_codes = {teams_by_id[tid]['code'] for tid in team_ids}
     shirts_by_team_code = await _fetch_shirt_images(team_codes)
+    pitch_image = await _fetch_pitch_image()
 
     return create_squad_image(
         team_name=team_name or "",
@@ -108,5 +146,6 @@ async def build_myteam_image(fpl_id: int, team_name: str | None = None) -> Image
         vice_id=vice_id,
         shirts_by_team_code=shirts_by_team_code,
         active_chip=active_chip,
+        pitch_image=pitch_image,
     )
 
