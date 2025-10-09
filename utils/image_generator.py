@@ -1,5 +1,6 @@
 import io
 from PIL import Image, ImageDraw, ImageFont, ImageColor
+from typing import Dict, List, Any, Optional
 
 # Cup colors (duplicated to avoid changing call signatures or cross-module deps)
 CUP_COLORS = {
@@ -392,3 +393,122 @@ def create_leaderboard_image(standings):
     return img_byte_arr
 
 
+
+def _safe_font(name: str, size: int):
+    try:
+        return ImageFont.truetype(name, size)
+    except Exception:
+        return ImageFont.load_default()
+
+
+def _centered(draw: ImageDraw.ImageDraw, text: str, font, cx: int, y: int, fill: str):
+    bbox = draw.textbbox((0, 0), text, font=font)
+    w = bbox[2] - bbox[0]
+    draw.text((cx - w // 2, y), text, font=font, fill=fill)
+
+
+def _row_x_positions(width: int, count: int, margin: int = 80) -> List[int]:
+    if count <= 0:
+        return []
+    step = (width - margin * 2) // (count + 1)
+    return [margin + step * (i + 1) for i in range(count)]
+
+
+def create_squad_image(
+    *,
+    team_name: str,
+    event_name: str,
+    total_points: int,
+    lines: Dict[str, List[Dict[str, Any]]],
+    bench: List[Dict[str, Any]],
+    elements_by_id: Dict[int, Dict[str, Any]],
+    teams_by_id: Dict[int, Dict[str, Any]],
+    live_points: Dict[int, int],
+    captain_id: Optional[int],
+    vice_id: Optional[int],
+    shirts_by_team_code: Dict[int, Image.Image],
+    active_chip: Optional[str] = None,
+) -> Image.Image:
+    # Canvas and colors approx. to FPL app theme
+    W, H = 1080, 1640
+    bg = Image.new('RGB', (W, H), '#190028')
+    draw = ImageDraw.Draw(bg)
+
+    # Fonts
+    title_font = _safe_font('arialbd.ttf', 42)
+    sub_font = _safe_font('arial.ttf', 26)
+    name_font = _safe_font('arialbd.ttf', 24)
+    pts_font = _safe_font('arialbd.ttf', 26)
+
+    # Header
+    header_h = 180
+    draw.rectangle([0, 0, W, header_h], fill='#26093f')
+    draw.text((28, 26), team_name, font=title_font, fill='white')
+    draw.text((28, 86), event_name, font=sub_font, fill='#c0b6d2')
+
+    # Total points tile
+    tile_w, tile_h = 220, 120
+    tx, ty = W - tile_w - 28, 30
+    draw.rounded_rectangle([tx, ty, tx + tile_w, ty + tile_h], radius=18, fill='#35b6ff')
+    _centered(draw, str(total_points), _safe_font('arialbd.ttf', 48), tx + tile_w // 2, ty + 24, 'white')
+    _centered(draw, 'Total Points', sub_font, tx + tile_w // 2, ty + 74, 'white')
+
+    # Pitch background
+    pitch_y0 = header_h + 10
+    pitch_y1 = H - 260
+    draw.rounded_rectangle([28, pitch_y0, W - 28, pitch_y1], radius=24, fill='#0b6a34')
+
+    # Row Y positions
+    gk_y = pitch_y0 + 120
+    def_y = gk_y + 220
+    mid_y = def_y + 220
+    fwd_y = mid_y + 220
+    bench_y = pitch_y1 + 20
+
+    def draw_player(cx: int, cy: int, pick: Dict[str, Any], bench_mode: bool):
+        el = elements_by_id[pick['element']]
+        team = teams_by_id[el['team']]
+        team_code = team['code']
+        shirt = shirts_by_team_code.get(team_code)
+        if shirt:
+            s = shirt.resize((120, 120))
+            bg.paste(s, (cx - 60, cy - 106), s)
+
+        # Name label
+        name = el['web_name']
+        _centered(draw, name, name_font, cx, cy + 24, 'white')
+
+        # Points chip
+        raw_pts = live_points.get(el['id'], 0)
+        shown_pts = raw_pts if bench_mode else raw_pts * max(1, pick.get('multiplier', 0))
+        tag_w, tag_h = 80, 34
+        rx, ry = cx - tag_w // 2, cy + 56
+        draw.rounded_rectangle([rx, ry, rx + tag_w, ry + tag_h], radius=10, fill='#512379')
+        _centered(draw, str(shown_pts), pts_font, cx, ry + 5, 'white')
+
+        # C / V badge
+        if el['id'] == captain_id or el['id'] == vice_id:
+            badge = 'C' if el['id'] == captain_id else 'V'
+            bx, by, r = cx + 38, cy - 92, 16
+            draw.ellipse([bx - r, by - r, bx + r, by + r], fill='#ffd000')
+            _centered(draw, badge, _safe_font('arialbd.ttf', 18), bx, by - 11, 'black')
+
+    # Draw XI rows
+    for row_key, y in (('GK', gk_y), ('DEF', def_y), ('MID', mid_y), ('FWD', fwd_y)):
+        picks = lines.get(row_key, [])
+        xs = _row_x_positions(W, len(picks))
+        for cx, p in zip(xs, picks):
+            draw_player(cx, y, p, bench_mode=False)
+
+    # Draw bench
+    xs = _row_x_positions(W, len(bench))
+    for cx, p in zip(xs, bench):
+        draw_player(cx, bench_y, p, bench_mode=True)
+
+    # Active chip indicator
+    if active_chip:
+        chip_text = active_chip.replace('_', ' ').title()
+        draw.rounded_rectangle([28, header_h - 38, 28 + 220, header_h - 8], radius=12, fill='#6a2bbd')
+        _centered(draw, chip_text, _safe_font('arialbd.ttf', 20), 28 + 110, header_h - 34, 'white')
+
+    return bg

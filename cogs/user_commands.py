@@ -1,7 +1,9 @@
 from discord.ext import commands
+import io
+import discord
 
 from repos.db_repo import upsert_user, get_user_by_discord_id, upsert_league, get_league_id_for_guild
-from services.user_service import fetch_user_team_name, fetch_user_total_points
+from services.user_service import fetch_user_team_name, fetch_user_total_points, build_myteam_image
 
 
 class UserCommands(commands.Cog):
@@ -20,17 +22,23 @@ class UserCommands(commands.Cog):
         except Exception:
             await ctx.send("An error occurred while linking your account. Please check your FPL ID and try again.")
 
-    @commands.hybrid_command(name="myteam", description="Show your linked FPL team")
+    @commands.hybrid_command(name="myteam", description="Show your current FPL squad image for this GW")
     async def myteam(self, ctx: commands.Context):
         try:
             result = await get_user_by_discord_id(ctx.author.id)
-            if result:
-                fpl_id, team_name = result
-                await ctx.send(f"Your linked FPL team is: {team_name} (ID: {fpl_id})")
-            else:
-                await ctx.send("You haven't linked an FPL team yet. Use the !link command to link your team.")
+            if not result:
+                await ctx.send("You haven't linked an FPL team yet. Use the !link <fpl_id> command to link your team.")
+                return
+
+            fpl_id, team_name = result
+            await ctx.defer()
+            image = await build_myteam_image(fpl_id, team_name)
+            buf = io.BytesIO()
+            image.save(buf, format='PNG')
+            buf.seek(0)
+            await ctx.send(file=discord.File(fp=buf, filename='myteam.png'))
         except Exception:
-            await ctx.send("An error occurred while fetching your team information.")
+            await ctx.send("An error occurred while generating your squad image.")
 
     @commands.hybrid_command(name="mypoints", description="Show your total FPL points")
     async def mypoints(self, ctx: commands.Context):
