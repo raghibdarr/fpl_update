@@ -7,6 +7,7 @@ from collections import defaultdict
 
 from utils.api_helpers import fetch_fpl_data
 from utils.image_generator import create_fixture_grid, create_table_image
+from services.user_service import build_myteam_image, fetch_user_team_name
 from utils.colors import get_fdr_color
 from services.fixtures_service import fetch_fixture_data
 from data.team_aliases import team_aliases
@@ -168,6 +169,24 @@ class FPLCommands(commands.Cog):
                 await ctx.send(embed=embed)
         except Exception as e:
             await ctx.send(f"An error occurred while fetching fixtures. Please try again later.")
+
+
+    @commands.hybrid_command(name="showteam", description="Render a team's current GW squad image by FPL entry ID")
+    async def showteam(self, ctx: commands.Context, fpl_id: int):
+        await ctx.defer()
+        try:
+            team_name = None
+            try:
+                team_name = await fetch_user_team_name(fpl_id)
+            except Exception:
+                pass
+            img = await build_myteam_image(fpl_id, team_name)
+            buf = io.BytesIO()
+            img.save(buf, format="PNG")
+            buf.seek(0)
+            await ctx.send(file=discord.File(buf, filename=f"team_{fpl_id}.png"))
+        except Exception as e:
+            await ctx.send(f"Failed to render team {fpl_id}: {e}")
 
 
 async def setup(bot: commands.Bot):
