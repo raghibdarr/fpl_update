@@ -424,6 +424,29 @@ def _crop_transparent_borders(image: Image.Image) -> Image.Image:
     return image
 
 
+def _composite_one_sided_rounded_rect(bg: Image.Image, x1: int, y1: int, x2: int, y2: int, *, round_top: bool, radius: int, fill: tuple | str):
+    """Composite a rectangle onto bg with only top or bottom corners rounded.
+    If round_top=True, top corners rounded and bottom flat; otherwise bottom rounded and top flat.
+    """
+    w, h = max(0, x2 - x1), max(0, y2 - y1)
+    if w <= 0 or h <= 0:
+        return
+    r = max(0, min(radius, (min(w, h) - 1) // 2))
+    mask = Image.new('L', (w, h), 0)
+    md = ImageDraw.Draw(mask)
+    md.rounded_rectangle([0, 0, w - 1, h - 1], radius=r, fill=255)
+    if round_top:
+        if r > 0:
+            md.rectangle([0, h - r, w, h], fill=255)
+    else:
+        if r > 0:
+            md.rectangle([0, 0, w, r], fill=255)
+    color = Image.new('RGBA', (w, h), fill)
+    layer = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+    layer = Image.composite(color, layer, mask)
+    bg.alpha_composite(layer, (x1, y1))
+
+
 def create_squad_image(
     *,
     team_name: str,
@@ -450,6 +473,7 @@ def create_squad_image(
     sub_font = _safe_font('arial.ttf', 26)
     name_font = _safe_font('arialbd.ttf', 20)
     pts_font = _safe_font('arialbd.ttf', 20)
+    subs_title_font = _safe_font('arialbd.ttf', 42)
 
     # Header
     header_h = 180
@@ -464,11 +488,13 @@ def create_squad_image(
     _centered(draw, str(total_points), _safe_font('arialbd.ttf', 48), tx + tile_w // 2, ty + 24, 'white')
     _centered(draw, 'Total Points', sub_font, tx + tile_w // 2, ty + 74, 'white')
 
-    # Pitch background
+    # Pitch background (top rounded, bottom flat)
     pitch_y0 = header_h + 10
     pitch_y1 = H - 248
     pitch_rect = [28, pitch_y0, W - 28, pitch_y1]
     draw.rounded_rectangle(pitch_rect, radius=24, fill='#0b6a34')
+    # flatten the bottom corners by overdrawing a rectangle strip
+    draw.rectangle([pitch_rect[0], pitch_rect[3] - 24, pitch_rect[2], pitch_rect[3]], fill='#0b6a34')
     # If a pitch image was provided, paste it scaled to fit
     if pitch_image is not None:
         pr_w = pitch_rect[2] - pitch_rect[0]
@@ -496,9 +522,11 @@ def create_squad_image(
             scaled = pitch_image.resize((new_w, new_h), Image.LANCZOS)
             scaled = scaled.crop((x_offset, y_offset, x_offset + pr_w, y_offset + pr_h))
 
-        # Mask to keep rounded corners
+        # Mask: top rounded, bottom flat
         mask = Image.new('L', (pr_w, pr_h), 0)
-        ImageDraw.Draw(mask).rounded_rectangle([0, 0, pr_w, pr_h], radius=24, fill=255)
+        mdm = ImageDraw.Draw(mask)
+        mdm.rounded_rectangle([0, 0, pr_w, pr_h], radius=24, fill=255)
+        mdm.rectangle([0, pr_h - 24, pr_w, pr_h], fill=255)
         bg.paste(scaled.convert('RGBA'), (pitch_rect[0], pitch_rect[1]), mask)
 
     # Row Y positions
@@ -507,6 +535,7 @@ def create_squad_image(
     mid_y = def_y + 222
     fwd_y = mid_y + 222
     bench_y = pitch_y1 + 22
+    bench_xs = None  # will be set later if inner container is drawn
 
     # Card layout constants (fixed pixels; tune as desired)
     CARD_W = 129
@@ -630,15 +659,86 @@ def create_squad_image(
             draw.ellipse([bx - r, by - r, bx + r, by + r], fill='#ffd000')
             _centered(draw, badge, _safe_font('arialbd.ttf', 18), bx, by - 11, 'black')
 
-    # Draw XI rows
+    # Draw XI rows with enforced minimum spacing like the subs
+    def _centers_with_min_gap(container_x1: int, container_w: int, count: int, *, card_w: int = CARD_W, min_gap: int = 30, padding: int = 40) -> List[int]:
+        n = max(1, count)
+        usable_w = max(0, container_w - padding * 2)
+        required_w = n * card_w + (n - 1) * min_gap
+        if required_w <= usable_w:
+            left = container_x1 + (container_w - required_w) // 2
+            return [int(left + card_w // 2 + i * (card_w + min_gap)) for i in range(n)]
+        if n == 1:
+            return [container_x1 + container_w // 2]
+        step = max(card_w, usable_w // max(1, (n - 1)))
+        first_cx = container_x1 + padding
+        return [int(first_cx + i * step) for i in range(n)]
+
     for row_key, y in (('GK', gk_y), ('DEF', def_y), ('MID', mid_y), ('FWD', fwd_y)):
         picks = lines.get(row_key, [])
-        xs = _row_x_positions(W, len(picks))
+        cont_x1 = pitch_rect[0]
+        cont_w = pitch_rect[2] - pitch_rect[0]
+        xs = _centers_with_min_gap(cont_x1, cont_w, len(picks))
         for cx, p in zip(xs, picks):
             draw_player(cx, y, p, bench_mode=False)
 
+    # Substitutes container: flat top, rounded bottom, solid color, connected to pitch
+    panel_x1, panel_y1 = 28, pitch_y1
+    panel_x2, panel_y2 = W - 28, H - 20
+    panel_w, panel_h = panel_x2 - panel_x1, panel_y2 - panel_y1
+    if panel_w > 0 and panel_h > 0:
+        # Solid color panel (#28002B), bottom rounded only. Avoid stroke at top to keep flat edge.
+        _composite_one_sided_rounded_rect(bg, panel_x1, panel_y1, panel_x2, panel_y2, round_top=False, radius=24, fill=ImageColor.getrgb('#28002B'))
+        # draw.rounded_rectangle([panel_x1, panel_y1, panel_x2, panel_y2], radius=24, outline=(255, 255, 255, 50))
+
+        # Substitutes title near bottom
+        draw.text(((panel_x1 + panel_x2) // 2, panel_y2 - 50), 'Substitutes', font=subs_title_font, fill='white', anchor="mm")
+
+        # Inner glass container sized to the bench row
+        n = max(1, len(bench))
+        est_card_w = CARD_W
+        gap = 60
+        inner_w = min(panel_w - 80, est_card_w * n + gap * (n - 1) + 20)
+        # add vertical padding so cards don't overflow
+        inner_h = CARD_H + 30 
+        inner_x1 = panel_x1 + (panel_w - inner_w) // 2
+        # overlap upwards onto the pitch
+        overlap = 90  # increase/decrease to move further onto pitch
+        inner_y1 = panel_y1 - overlap
+        inner_x2 = inner_x1 + inner_w
+        inner_y2 = inner_y1 + inner_h
+
+        # Glass effect
+        # Use pitch portion for blur if overlapping above panel
+        crop_y1 = max(inner_y1, pitch_rect[1])
+        region = bg.crop((inner_x1, crop_y1, inner_x2, inner_y2)).resize((inner_w, inner_h)).filter(ImageFilter.GaussianBlur(10)).convert('RGBA')
+        tint = Image.new('RGBA', (inner_w, inner_h), (255, 255, 255, 40))
+        glass = Image.alpha_composite(region, tint)
+        mask = Image.new('L', (inner_w, inner_h), 0)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, inner_w - 1, inner_h - 1], radius=20, fill=255)
+        bg.paste(glass, (inner_x1, inner_y1), mask)
+        # no outline on the inner glass container (fully transparent border)
+        # draw.rounded_rectangle([inner_x1, inner_y1, inner_x2, inner_y2], radius=20, outline=(0, 0, 0, 0))
+
+        # Bench row centered over inner container
+        bench_y = inner_y1 + inner_h // 2 + 10
+        # Center bench horizontally within inner container with guaranteed gaps
+        desired_gap = 30
+        n_cards = max(1, len(bench))
+        required_w = n_cards * CARD_W + (n_cards - 1) * desired_gap
+        usable_w = inner_w - 40  # small side padding inside the glass
+        if required_w <= usable_w:
+            left = inner_x1 + (inner_w - required_w) // 2
+            # convert to centers
+            bench_xs = [int(left + CARD_W // 2 + i * (CARD_W + desired_gap)) for i in range(n_cards)]
+        else:
+            # fallback to proportional spacing without overlap where possible
+            margin = max(20, CARD_W // 2)
+            step = max(CARD_W, (inner_w - margin * 2) // max(1, (n_cards - 1)))
+            first_cx = inner_x1 + margin
+            bench_xs = [int(first_cx + i * step) for i in range(n_cards)]
+
     # Draw bench
-    xs = _row_x_positions(W, len(bench))
+    xs = bench_xs if bench_xs else _row_x_positions(W, len(bench))
     for cx, p in zip(xs, bench):
         draw_player(cx, bench_y, p, bench_mode=True)
 
