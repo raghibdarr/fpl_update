@@ -529,7 +529,7 @@ def create_squad_image(
         mdm.rectangle([0, pr_h - 24, pr_w, pr_h], fill=255)
         bg.paste(scaled.convert('RGBA'), (pitch_rect[0], pitch_rect[1]), mask)
 
-    # Row Y positions
+    # Row Y positions (fixed to preserve original look)
     gk_y = pitch_y0 + 126
     def_y = gk_y + 222
     mid_y = def_y + 222
@@ -659,25 +659,32 @@ def create_squad_image(
             draw.ellipse([bx - r, by - r, bx + r, by + r], fill='#ffd000')
             _centered(draw, badge, _safe_font('arialbd.ttf', 18), bx, by - 11, 'black')
 
-    # Draw XI rows with enforced minimum spacing like the subs
-    def _centers_with_min_gap(container_x1: int, container_w: int, count: int, *, card_w: int = CARD_W, min_gap: int = 30, padding: int = 40) -> List[int]:
-        n = max(1, count)
-        usable_w = max(0, container_w - padding * 2)
-        required_w = n * card_w + (n - 1) * min_gap
-        if required_w <= usable_w:
-            left = container_x1 + (container_w - required_w) // 2
-            return [int(left + card_w // 2 + i * (card_w + min_gap)) for i in range(n)]
-        if n == 1:
-            return [container_x1 + container_w // 2]
-        step = max(card_w, usable_w // max(1, (n - 1)))
-        first_cx = container_x1 + padding
-        return [int(first_cx + i * step) for i in range(n)]
-
+    # Draw XI rows using original centering; if 5 players (or tight fit), enforce minimum non-overlapping gap
     for row_key, y in (('GK', gk_y), ('DEF', def_y), ('MID', mid_y), ('FWD', fwd_y)):
         picks = lines.get(row_key, [])
-        cont_x1 = pitch_rect[0]
-        cont_w = pitch_rect[2] - pitch_rect[0]
-        xs = _centers_with_min_gap(cont_x1, cont_w, len(picks))
+        n = len(picks)
+        if n >= 5:
+            # Safe layout within inner container [80, W-80] with minimum gap
+            inner_x1 = 80
+            inner_x2 = W - 80
+            inner_w = inner_x2 - inner_x1
+            desired_gap = 12  # pixels; avoids overlap but keeps FPL-like density
+            if n == 1:
+                xs = [inner_x1 + inner_w // 2]
+            else:
+                required = n * CARD_W + (n - 1) * desired_gap
+                if required <= inner_w:
+                    # distribute leftover evenly across gaps and sides
+                    extra = inner_w - required
+                    gap = desired_gap + extra / (n - 1)
+                else:
+                    # fit as much as possible without overlap
+                    gap = max(2, (inner_w - n * CARD_W) / max(1, (n - 1)))
+                side_pad = max(0, (inner_w - (n * CARD_W + (n - 1) * gap)) / 2)
+                start_cx = inner_x1 + side_pad + CARD_W / 2
+                xs = [int(start_cx + i * (CARD_W + gap)) for i in range(n)]
+        else:
+            xs = _row_x_positions(W, n)
         for cx, p in zip(xs, picks):
             draw_player(cx, y, p, bench_mode=False)
 
