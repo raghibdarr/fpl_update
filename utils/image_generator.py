@@ -530,16 +530,22 @@ def create_squad_image(
         card_y = cy - card_h // 2
 
         # Shadow layer
-        shadow = Image.new('RGBA', (card_w, card_h), (0, 0, 0, 0))
-        sd = ImageDraw.Draw(shadow)
-        sd.rounded_rectangle([0, 0, card_w, card_h], radius=20, fill=(0, 0, 0, 120))
-        shadow = shadow.filter(ImageFilter.GaussianBlur(8))
-        bg.alpha_composite(shadow, (card_x, card_y + 6))
+        # shadow = Image.new('RGBA', (card_w, card_h), (0, 0, 0, 0))
+        # sd = ImageDraw.Draw(shadow)
+        # sd.rounded_rectangle([0, 0, card_w, card_h], radius=20, fill=(0, 0, 0, 120))
+        # shadow = shadow.filter(ImageFilter.GaussianBlur(8))
+        # bg.alpha_composite(shadow, (card_x, card_y + 6))
         
-        # Glass rectangle
-        glass = Image.new('RGBA', (card_w, card_h), (255, 255, 255, 48))
+        # Glass rectangle (rounded fill to avoid square corners)
+        glass = Image.new('RGBA', (card_w, card_h), (0, 0, 0, 0))
         gd = ImageDraw.Draw(glass)
-        gd.rounded_rectangle([0, 0, card_w - 1, card_h - 1], radius=20, outline=(255, 255, 255, 90), width=2)
+        gd.rounded_rectangle(
+            [0, 0, card_w - 1, card_h - 1],
+            radius=20,
+            fill=(255, 255, 255, 48),
+            outline=(255, 255, 255, 90),
+            width=2,
+        )
         bg.alpha_composite(glass, (card_x, card_y))
 
         # Fixed bars placement
@@ -564,29 +570,56 @@ def create_squad_image(
             sy = card_y + TOP_GAP
             bg.alpha_composite(s, (sx, sy))
 
-        # Name bar (white rounded rect with theme purple text) over the kit
+        # Helper to paste a rectangle with only-top or only-bottom rounded corners
+        def _paste_one_sided_rounded_rect(x1: int, y1: int, x2: int, y2: int, *, round_top: bool, radius: int, fill: tuple | str):
+            w, h = max(0, x2 - x1), max(0, y2 - y1)
+            if w <= 0 or h <= 0:
+                return
+            r = max(0, min(radius, (min(w, h) - 1) // 2))
+            # Build mask with desired corners
+            mask = Image.new('L', (w, h), 0)
+            md = ImageDraw.Draw(mask)
+            md.rounded_rectangle([0, 0, w - 1, h - 1], radius=r, fill=255)
+            if round_top:
+                # flatten bottom corners
+                if r > 0:
+                    md.rectangle([0, h - r, w, h], fill=255)
+            else:
+                # flatten top corners
+                if r > 0:
+                    md.rectangle([0, 0, w, r], fill=255)
+            color = Image.new('RGBA', (w, h), fill)
+            layer = Image.new('RGBA', (w, h), (0, 0, 0, 0))
+            layer = Image.composite(color, layer, mask)
+            bg.alpha_composite(layer, (x1, y1))
+
+        # Name bar (rounded top corners, theme purple text) over the kit
         name = el['web_name']
         theme_purple = '#37003C'
-        name_x1 = card_x
-        name_x2 = card_x + card_w
-        draw.rectangle([name_x1, name_y, name_x2, name_y + NAME_H], fill='white')
+        # shrink width and height by 5px each
+        name_x1 = card_x + 2
+        name_x2 = card_x + card_w - 3
+        name_h = max(1, NAME_H)
+        _paste_one_sided_rounded_rect(name_x1, name_y, name_x2, name_y + name_h, round_top=True, radius=5, fill=(255, 255, 255, 255))
         max_name_w = name_x2 - name_x1 - 12
         fitted = fit_text_to_width(draw, name, name_font, max_name_w)
-        # vertical centering for name text
-        name_tb = draw.textbbox((0, 0), fitted, font=name_font)
-        name_th = name_tb[3] - name_tb[1]
-        _centered(draw, fitted, name_font, (name_x1 + name_x2) // 2, int(name_y + (NAME_H - name_th) / 2), theme_purple)
+        # center text both horizontally and vertically in the name bar
+        name_cx = (name_x1 + name_x2) // 2
+        name_cy = name_y + name_h // 2
+        draw.text((name_cx, name_cy), fitted, font=name_font, fill=theme_purple, anchor="mm")
 
-        # Points bar (full width, stacked under the name bar) over the kit
+        # Points bar (rounded bottom corners) over the kit
         raw_pts = live_points.get(el['id'], 0)
         shown_pts = raw_pts if bench_mode else raw_pts * max(1, pick.get('multiplier', 0))
-        pts_x1 = card_x
-        pts_x2 = card_x + card_w
-        draw.rectangle([pts_x1, pts_y, pts_x2, pts_y + PTS_H], fill='#37003c')
+        pts_x1 = card_x + 2
+        pts_x2 = card_x + card_w - 3
+        pts_h = max(1, PTS_H)
+        _paste_one_sided_rounded_rect(pts_x1, pts_y, pts_x2, pts_y + pts_h, round_top=False, radius=20, fill=ImageColor.getrgb('#37003c') + (255,))
         pts_text = str(shown_pts)
-        pts_tb = draw.textbbox((0, 0), pts_text, font=pts_font)
-        pts_th = pts_tb[3] - pts_tb[1]
-        _centered(draw, pts_text, pts_font, (pts_x1 + pts_x2) // 2, int(pts_y + (PTS_H - pts_th) / 2), 'white')
+        # center text both horizontally and vertically in the points bar
+        pts_cx = (pts_x1 + pts_x2) // 2
+        pts_cy = pts_y + pts_h // 2
+        draw.text((pts_cx, pts_cy), pts_text, font=pts_font, fill='white', anchor="mm")
 
         # C / V badge
         if el['id'] == captain_id or el['id'] == vice_id:
