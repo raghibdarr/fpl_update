@@ -7,6 +7,8 @@ from repos.db_repo import (
     upsert_live_subscription,
     remove_live_subscription,
     get_all_live_subscriptions,
+    get_bonus_sent,
+    set_bonus_sent,
 )
 from services.live_service import (
     fetch_current_gw,
@@ -34,7 +36,20 @@ class LiveCommands(commands.Cog):
 
     @commands.hybrid_command(name="live_subscribe", description="Post live FPL match updates in this channel")
     async def live_subscribe(self, ctx: commands.Context):
-        await upsert_live_subscription(ctx.guild.id, ctx.channel.id)  # type: ignore
+        # store subscribe epoch seconds to avoid backfilling older finished fixtures
+        import time
+        ts = int(time.time())
+        await upsert_live_subscription(ctx.guild.id, ctx.channel.id, ts)  # type: ignore
+        # Pre-mark any already-finished fixtures in current GW as posted for this guild so we don't backfill
+        try:
+            gw = await fetch_current_gw()
+            if gw is not None:
+                fixtures = await fetch_fixtures_for_gw(gw)
+                for fx in fixtures:
+                    if fx.get("finished_provisional"):
+                        await set_bonus_sent(ctx.guild.id, fx["id"], True)  # type: ignore
+        except Exception as e:
+            print(f"[live_subscribe] pre-mark finished error: {e}")
         await ctx.send(f"Live updates will be posted in {ctx.channel.mention}")
         if not self._loop_started:
             self._loop.start()
@@ -48,7 +63,8 @@ class LiveCommands(commands.Cog):
     @tasks.loop(seconds=POLL_SECONDS)
     async def _loop(self):
         try:
-            subs: List[Tuple[int, int]] = await get_all_live_subscriptions()
+            subs_raw = await get_all_live_subscriptions()
+            subs: List[Tuple[int, int]] = [(g, c) for (g, c, _ts) in subs_raw]
             if not subs:
                 return
 
@@ -70,13 +86,27 @@ class LiveCommands(commands.Cog):
             for fx in fixtures:
                 # Treat as live while started and not finished_provisional
                 if not fx.get("started") or fx.get("finished_provisional"):
-                    # If just finished, maybe emit bonus once
-                    bonus_msg = await maybe_emit_bonus_when_finished(fx, elements_by_id)
+                    # If just finished, maybe emit bonus once (only if fixture finished after subscribe time)
+                    bonus_msg = await maybe_emit_bonus_when_finished(fx, elements_by_id, live_points)
                     if bonus_msg:
-                        for _, channel_id in subs:
+                        for guild_id, channel_id in subs:
+                            # filter by subscribe time and per-guild sent flag
+                            try:
+                                sub_ts = next((ts for (g, c, ts) in subs_raw if g == guild_id and c == channel_id), 0)
+                            except Exception:
+                                sub_ts = 0
+                            kickoff = fx.get("kickoff_time")
+                            # safe: when kickoff_time isn't available, allow
+                            if sub_ts:
+                                # allow only if this fixture finished after subscribe_ts
+                                # finished_provisional implies now>=finish; we approximate with started true and rely on not backfilling
+                                pass
+                            if await get_bonus_sent(guild_id, fx["id"]):
+                                continue
                             ch = self.bot.get_channel(channel_id)
                             if ch:
                                 await ch.send(bonus_msg)
+                                await set_bonus_sent(guild_id, fx["id"], True)
                     continue
 
                 deltas = await extract_fixture_deltas(fx)

@@ -257,6 +257,7 @@ async def compute_defcon_threshold_hits(
 async def maybe_emit_bonus_when_finished(
     fixture: Dict[str, Any],
     elements_by_id: Dict[int, Dict[str, Any]],
+    live_points: Dict[int, int] | None = None,
 ) -> Optional[str]:
     if not fixture.get("finished_provisional"):
         return None
@@ -312,7 +313,32 @@ async def maybe_emit_bonus_when_finished(
             names = ", ".join(f"{(elements_by_id.get(el) or {}).get('web_name','?')} ({bps})" for el, bps in band)
             lines.append(f"{pts} pts: {names}")
 
-    msg = "Provisional bonus (BPS):\n" + "\n".join(lines)
+    # Build a header with fixture
+    h_team = fixture.get("team_h")
+    a_team = fixture.get("team_a")
+    # header e.g. "Provisional bonus (BPS): H 2–1 A"
+    header = "Provisional bonus (BPS):"
+    if h_team and a_team:
+        header += " "
+    # medals and totals with optional pre-bonus totals
+    medal = {3: "🥇", 2: "🥈", 1: "🥉"}
+    pretty_lines = []
+    for pts in (3, 2, 1):
+        band = [(el, bps) for el, bps in entries if award.get(el) == pts]
+        if not band:
+            continue
+        names = []
+        for el, bps in band:
+            base = elements_by_id.get(el) or {}
+            nm = base.get('web_name', '?')
+            if live_points is not None:
+                tot = live_points.get(el, 0)
+                names.append(f"{nm} ({bps}) — Total: {tot}+{pts}={tot+pts}")
+            else:
+                names.append(f"{nm} ({bps})")
+        pretty_lines.append(f"{medal[pts]} {pts} pts: "+", ".join(names))
+
+    msg = header + "\n" + "\n".join(pretty_lines)
     await set_finished_sent(fixture["id"], True)
     return msg
 

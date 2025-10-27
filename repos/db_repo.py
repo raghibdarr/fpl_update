@@ -18,10 +18,19 @@ async def setup_database():
                 league_id INTEGER
             )
         ''')
+        # legacy v1 table without subscribe_ts
         await db.execute('''
             CREATE TABLE IF NOT EXISTS live_subscriptions (
                 guild_id INTEGER PRIMARY KEY,
                 channel_id INTEGER
+            )
+        ''')
+        # v2 table with subscribe_ts (epoch seconds)
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS live_subscriptions_v2 (
+                guild_id INTEGER PRIMARY KEY,
+                channel_id INTEGER,
+                subscribe_ts INTEGER
             )
         ''')
         await db.execute('''
@@ -56,6 +65,14 @@ async def setup_database():
                 finished_sent INTEGER
             )
         ''')
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS live_bonus_sent (
+                guild_id INTEGER,
+                fixture_id INTEGER,
+                sent INTEGER,
+                PRIMARY KEY (guild_id, fixture_id)
+            )
+        ''')
         await db.commit()
 
 
@@ -88,9 +105,10 @@ async def get_league_id_for_guild(guild_id: int):
 
 
 # Live subscriptions
-async def upsert_live_subscription(guild_id: int, channel_id: int) -> None:
+async def upsert_live_subscription(guild_id: int, channel_id: int, subscribe_ts: int | None = None) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
-        await db.execute('INSERT OR REPLACE INTO live_subscriptions (guild_id, channel_id) VALUES (?, ?)', (guild_id, channel_id))
+        # write into v2
+        await db.execute('INSERT OR REPLACE INTO live_subscriptions_v2 (guild_id, channel_id, subscribe_ts) VALUES (?, ?, ?)', (guild_id, channel_id, subscribe_ts or 0))
         await db.commit()
 
 
@@ -102,6 +120,11 @@ async def remove_live_subscription(guild_id: int) -> None:
 
 async def get_live_subscription_channel(guild_id: int):
     async with aiosqlite.connect(DB_PATH) as db:
+        # prefer v2
+        async with db.execute('SELECT channel_id FROM live_subscriptions_v2 WHERE guild_id = ?', (guild_id,)) as cursor:
+            row = await cursor.fetchone()
+            if row:
+                return row[0]
         async with db.execute('SELECT channel_id FROM live_subscriptions WHERE guild_id = ?', (guild_id,)) as cursor:
             row = await cursor.fetchone()
             return row[0] if row else None
@@ -109,8 +132,14 @@ async def get_live_subscription_channel(guild_id: int):
 
 async def get_all_live_subscriptions():
     async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute('SELECT guild_id, channel_id, subscribe_ts FROM live_subscriptions_v2') as cursor:
+            rows = await cursor.fetchall()
+        if rows:
+            return rows
+        # fallback to legacy table with no timestamp
         async with db.execute('SELECT guild_id, channel_id FROM live_subscriptions') as cursor:
-            return await cursor.fetchall()
+            rows2 = await cursor.fetchall()
+            return [(g, c, 0) for (g, c) in rows2]
 
 
 # Seen counts per fixture/stat/element
@@ -166,4 +195,18 @@ async def get_finished_sent(fixture_id: int) -> bool:
 async def set_finished_sent(fixture_id: int, sent: bool) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute('INSERT OR REPLACE INTO live_fixture_flags (fixture_id, finished_sent) VALUES (?, ?)', (fixture_id, 1 if sent else 0))
+        await db.commit()
+
+
+# Per-guild bonus sent flags
+async def get_bonus_sent(guild_id: int, fixture_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute('SELECT sent FROM live_bonus_sent WHERE guild_id = ? AND fixture_id = ?', (guild_id, fixture_id)) as cursor:
+            row = await cursor.fetchone()
+            return bool(row[0]) if row else False
+
+
+async def set_bonus_sent(guild_id: int, fixture_id: int, sent: bool) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('INSERT OR REPLACE INTO live_bonus_sent (guild_id, fixture_id, sent) VALUES (?, ?, ?)', (guild_id, fixture_id, 1 if sent else 0))
         await db.commit()
