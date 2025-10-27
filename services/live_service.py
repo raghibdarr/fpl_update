@@ -71,6 +71,11 @@ def _scoreline(fx: Dict[str, Any], teams_by_id: Dict[int, Dict[str, Any]]) -> st
     return f"{hsn} {fx.get('team_h_score', 0)}–{fx.get('team_a_score', 0)} {asn}"
 
 
+def _fixture_header(fx: Dict[str, Any], teams_by_id: Dict[int, Dict[str, Any]]) -> str:
+    """Return header line with teams and current scoreline."""
+    return _scoreline(fx, teams_by_id)
+
+
 def _nice_name(el: Dict[str, Any]) -> str:
     return el.get("web_name") or el.get("second_name") or el.get("first_name") or "Unknown"
 
@@ -131,7 +136,7 @@ def format_event_message(
     teams_by_id: Dict[int, Dict[str, Any]],
     live_points: Dict[int, int],
 ) -> Optional[str]:
-    sl = _scoreline(fixture, teams_by_id)
+    header = _fixture_header(fixture, teams_by_id)
 
     def total_line(el_id: int) -> str:
         pts = live_points.get(el_id, 0)
@@ -144,50 +149,51 @@ def format_event_message(
         if not s_el or not a_el:
             return None
         return (
+            f"{header}\n"
             "Goal!\n"
             f"{_stat_emoji('goals_scored')} {_nice_name(s_el)} {total_line(s_el['id'])}\n"
             f"{_stat_emoji('assists')} {_nice_name(a_el)} {total_line(a_el['id'])}\n\n"
-            f"{sl}"
+            f""
         )
     if t == "goal":
         s_el = elements_by_id.get(item["scorer"])  # type: ignore
         if not s_el:
             return None
-        return "Goal!\n" f"{_stat_emoji('goals_scored')} {_nice_name(s_el)} {total_line(s_el['id'])}\n\n{sl}"
+        return f"{header}\n" + "Goal!\n" + f"{_stat_emoji('goals_scored')} {_nice_name(s_el)} {total_line(s_el['id'])}"
     if t == "assist":
         a_el = elements_by_id.get(item["assister"])  # type: ignore
         if not a_el:
             return None
-        return "Assist!\n" f"{_stat_emoji('assists')} {_nice_name(a_el)} {total_line(a_el['id'])}\n\n{sl}"
+        return f"{header}\n" + "Assist!\n" + f"{_stat_emoji('assists')} {_nice_name(a_el)} {total_line(a_el['id'])}"
     if t == "yellow_cards":
         p = elements_by_id.get(item["player"])  # type: ignore
         if not p:
             return None
-        return f"Yellow card\n{_stat_emoji('yellow_cards')} {_nice_name(p)} {total_line(p['id'])}\n\n{sl}"
+        return f"{header}\nYellow card\n{_stat_emoji('yellow_cards')} {_nice_name(p)} {total_line(p['id'])}"
     if t == "red_cards":
         p = elements_by_id.get(item["player"])  # type: ignore
         if not p:
             return None
-        return f"Red card\n{_stat_emoji('red_cards')} {_nice_name(p)} {total_line(p['id'])}\n\n{sl}"
+        return f"{header}\nRed card\n{_stat_emoji('red_cards')} {_nice_name(p)} {total_line(p['id'])}"
     if t == "own_goals":
         p = elements_by_id.get(item["player"])  # type: ignore
         if not p:
             return None
-        return f"Own goal\n{_stat_emoji('own_goals')} {_nice_name(p)} {total_line(p['id'])}\n\n{sl}"
+        return f"{header}\nOwn goal\n{_stat_emoji('own_goals')} {_nice_name(p)} {total_line(p['id'])}"
     if t == "penalties_saved":
         p = elements_by_id.get(item["player"])  # type: ignore
         if not p:
             return None
-        return f"Penalty saved\n{_stat_emoji('penalties_saved')} {_nice_name(p)} {total_line(p['id'])}\n\n{sl}"
+        return f"{header}\nPenalty saved\n{_stat_emoji('penalties_saved')} {_nice_name(p)} {total_line(p['id'])}"
     if t == "penalties_missed":
         p = elements_by_id.get(item["player"])  # type: ignore
         if not p:
             return None
-        return f"Penalty missed\n{_stat_emoji('penalties_missed')} {_nice_name(p)} {total_line(p['id'])}\n\n{sl}"
+        return f"{header}\nPenalty missed\n{_stat_emoji('penalties_missed')} {_nice_name(p)} {total_line(p['id'])}"
     if t == "modified":
         p = elements_by_id.get(item.get("player")) if item.get("player") else None
         name = _nice_name(p) if p else "Update"
-        return f"Modified!\nℹ️ {name}: a stat has been adjusted.\n\n{sl}"
+        return f"{header}\nModified!\nℹ️ {name}: a stat has been adjusted."
     return None
 
 
@@ -257,6 +263,7 @@ async def compute_defcon_threshold_hits(
 async def maybe_emit_bonus_when_finished(
     fixture: Dict[str, Any],
     elements_by_id: Dict[int, Dict[str, Any]],
+    teams_by_id: Dict[int, Dict[str, Any]],
     live_points: Dict[int, int] | None = None,
 ) -> Optional[str]:
     if not fixture.get("finished_provisional"):
@@ -313,13 +320,8 @@ async def maybe_emit_bonus_when_finished(
             names = ", ".join(f"{(elements_by_id.get(el) or {}).get('web_name','?')} ({bps})" for el, bps in band)
             lines.append(f"{pts} pts: {names}")
 
-    # Build a header with fixture
-    h_team = fixture.get("team_h")
-    a_team = fixture.get("team_a")
-    # header e.g. "Provisional bonus (BPS): H 2–1 A"
-    header = "Provisional bonus (BPS):"
-    if h_team and a_team:
-        header += " "
+    # Build a header with fixture and score
+    header = f"Provisional bonus (BPS): {_fixture_header(fixture, teams_by_id)}"
     # medals and totals with optional pre-bonus totals
     medal = {3: "🥇", 2: "🥈", 1: "🥉"}
     pretty_lines = []
@@ -333,7 +335,7 @@ async def maybe_emit_bonus_when_finished(
             nm = base.get('web_name', '?')
             if live_points is not None:
                 tot = live_points.get(el, 0)
-                names.append(f"{nm} ({bps}) — Total: {tot}+{pts}={tot+pts}")
+                names.append(f"{nm} ({bps}) — Total: {tot+pts}")
             else:
                 names.append(f"{nm} ({bps})")
         pretty_lines.append(f"{medal[pts]} {pts} pts: "+", ".join(names))

@@ -87,7 +87,7 @@ class LiveCommands(commands.Cog):
                 # Treat as live while started and not finished_provisional
                 if not fx.get("started") or fx.get("finished_provisional"):
                     # If just finished, maybe emit bonus once (only if fixture finished after subscribe time)
-                    bonus_msg = await maybe_emit_bonus_when_finished(fx, elements_by_id, live_points)
+                    bonus_msg = await maybe_emit_bonus_when_finished(fx, elements_by_id, teams_by_id, live_points)
                     if bonus_msg:
                         for guild_id, channel_id in subs:
                             # filter by subscribe time and per-guild sent flag
