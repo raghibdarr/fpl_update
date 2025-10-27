@@ -18,6 +18,44 @@ async def setup_database():
                 league_id INTEGER
             )
         ''')
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS live_subscriptions (
+                guild_id INTEGER PRIMARY KEY,
+                channel_id INTEGER
+            )
+        ''')
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS live_seen_events (
+                fixture_id INTEGER,
+                stat TEXT,
+                element INTEGER,
+                count INTEGER,
+                PRIMARY KEY (fixture_id, stat, element)
+            )
+        ''')
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS live_defcon_sent (
+                fixture_id INTEGER,
+                team_id INTEGER,
+                sent INTEGER,
+                PRIMARY KEY (fixture_id, team_id)
+            )
+        ''')
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS live_dc (
+                fixture_id INTEGER,
+                element INTEGER,
+                count INTEGER,
+                hit_sent INTEGER,
+                PRIMARY KEY (fixture_id, element)
+            )
+        ''')
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS live_fixture_flags (
+                fixture_id INTEGER PRIMARY KEY,
+                finished_sent INTEGER
+            )
+        ''')
         await db.commit()
 
 
@@ -47,3 +85,85 @@ async def get_league_id_for_guild(guild_id: int):
         async with db.execute('SELECT league_id FROM leagues WHERE guild_id = ?', (guild_id,)) as cursor:
             row = await cursor.fetchone()
             return row[0] if row else None
+
+
+# Live subscriptions
+async def upsert_live_subscription(guild_id: int, channel_id: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('INSERT OR REPLACE INTO live_subscriptions (guild_id, channel_id) VALUES (?, ?)', (guild_id, channel_id))
+        await db.commit()
+
+
+async def remove_live_subscription(guild_id: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('DELETE FROM live_subscriptions WHERE guild_id = ?', (guild_id,))
+        await db.commit()
+
+
+async def get_live_subscription_channel(guild_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute('SELECT channel_id FROM live_subscriptions WHERE guild_id = ?', (guild_id,)) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None
+
+
+async def get_all_live_subscriptions():
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute('SELECT guild_id, channel_id FROM live_subscriptions') as cursor:
+            return await cursor.fetchall()
+
+
+# Seen counts per fixture/stat/element
+async def get_seen_count(fixture_id: int, stat: str, element: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute('SELECT count FROM live_seen_events WHERE fixture_id = ? AND stat = ? AND element = ?', (fixture_id, stat, element)) as cursor:
+            row = await cursor.fetchone()
+            return row[0] if row else None
+
+
+async def set_seen_count(fixture_id: int, stat: str, element: int, count: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('INSERT OR REPLACE INTO live_seen_events (fixture_id, stat, element, count) VALUES (?, ?, ?, ?)', (fixture_id, stat, element, count))
+        await db.commit()
+
+
+# Defcon per element rows
+async def get_dc_row(fixture_id: int, element: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute('SELECT count, hit_sent FROM live_dc WHERE fixture_id = ? AND element = ?', (fixture_id, element)) as cursor:
+            row = await cursor.fetchone()
+            return row
+
+
+async def upsert_dc_row(fixture_id: int, element: int, count: int, hit_sent: bool):
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('INSERT OR REPLACE INTO live_dc (fixture_id, element, count, hit_sent) VALUES (?, ?, ?, ?)', (fixture_id, element, count, 1 if hit_sent else 0))
+        await db.commit()
+
+
+# Clean sheet defcon sent flags kept from earlier; not used now for DC but preserved
+async def get_defcon_sent(fixture_id: int, team_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute('SELECT sent FROM live_defcon_sent WHERE fixture_id = ? AND team_id = ?', (fixture_id, team_id)) as cursor:
+            row = await cursor.fetchone()
+            return bool(row[0]) if row else False
+
+
+async def set_defcon_sent(fixture_id: int, team_id: int, sent: bool) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('INSERT OR REPLACE INTO live_defcon_sent (fixture_id, team_id, sent) VALUES (?, ?, ?)', (fixture_id, team_id, 1 if sent else 0))
+        await db.commit()
+
+
+# Finished fixture bonus flag
+async def get_finished_sent(fixture_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute('SELECT finished_sent FROM live_fixture_flags WHERE fixture_id = ?', (fixture_id,)) as cursor:
+            row = await cursor.fetchone()
+            return bool(row[0]) if row else False
+
+
+async def set_finished_sent(fixture_id: int, sent: bool) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('INSERT OR REPLACE INTO live_fixture_flags (fixture_id, finished_sent) VALUES (?, ?)', (fixture_id, 1 if sent else 0))
+        await db.commit()

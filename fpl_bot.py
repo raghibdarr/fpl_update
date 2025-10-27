@@ -72,6 +72,7 @@ async def setup_hook():
     await bot.load_extension('cogs.fpl_commands')
     await bot.load_extension('cogs.league_commands')
     await bot.load_extension('cogs.user_commands')
+    await bot.load_extension('cogs.live_commands')
     # Dev-guild-only slash sync for instant availability
     dev_guild_id = os.getenv('DEV_GUILD_ID')
     if dev_guild_id:
