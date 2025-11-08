@@ -115,12 +115,18 @@ async def extract_fixture_deltas(
         asst = next((s for s in fixture.get("stats", []) if s.get("identifier") == "assists"), None)
         yc = next((s for s in fixture.get("stats", []) if s.get("identifier") == "yellow_cards"), None)
         rc = next((s for s in fixture.get("stats", []) if s.get("identifier") == "red_cards"), None)
+        og = next((s for s in fixture.get("stats", []) if s.get("identifier") == "own_goals"), None)
+        ps = next((s for s in fixture.get("stats", []) if s.get("identifier") == "penalties_saved"), None)
+        pm = next((s for s in fixture.get("stats", []) if s.get("identifier") == "penalties_missed"), None)
         print(
             f"[live] stats fixture={fixture_id} "
             f"goals.h={_fmt_entries(gs.get('h') if gs else [])} goals.a={_fmt_entries(gs.get('a') if gs else [])} "
             f"assists.h={_fmt_entries(asst.get('h') if asst else [])} assists.a={_fmt_entries(asst.get('a') if asst else [])} "
             f"yc.h={_fmt_entries(yc.get('h') if yc else [])} yc.a={_fmt_entries(yc.get('a') if yc else [])} "
-            f"rc.h={_fmt_entries(rc.get('h') if rc else [])} rc.a={_fmt_entries(rc.get('a') if rc else [])}"
+            f"rc.h={_fmt_entries(rc.get('h') if rc else [])} rc.a={_fmt_entries(rc.get('a') if rc else [])} "
+            f"og.h={_fmt_entries(og.get('h') if og else [])} og.a={_fmt_entries(og.get('a') if og else [])} "
+            f"ps.h={_fmt_entries(ps.get('h') if ps else [])} ps.a={_fmt_entries(ps.get('a') if ps else [])} "
+            f"pm.h={_fmt_entries(pm.get('h') if pm else [])} pm.a={_fmt_entries(pm.get('a') if pm else [])}"
         )
     except Exception as e:
         print(f"[live] stats log error fixture={fixture_id}: {e}")
