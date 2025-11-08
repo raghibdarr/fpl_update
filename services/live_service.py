@@ -10,6 +10,8 @@ from repos.db_repo import (
     upsert_dc_row,
     get_finished_sent,
     set_finished_sent,
+    get_fixture_initialized,
+    set_fixture_initialized,
 )
 
 
@@ -28,13 +30,19 @@ async def fetch_current_gw() -> Optional[int]:
     data = await fetch_fpl_data("bootstrap-static/")
     for e in data.get("events", []):
         if e.get("is_current"):
-            return e["id"]
+            gw_id = e["id"]
+            print(f"[live] fetch_current_gw -> {gw_id}")
+            return gw_id
     nxt = next((e for e in data.get("events", []) if e.get("is_next")), None)
-    return nxt["id"] if nxt else None
+    gw_id = nxt["id"] if nxt else None
+    print(f"[live] fetch_current_gw (fallback next) -> {gw_id}")
+    return gw_id
 
 
 async def fetch_fixtures_for_gw(gw: int) -> List[Dict[str, Any]]:
-    return await fetch_fpl_data(f"fixtures/?event={gw}")
+    fixtures = await fetch_fpl_data(f"fixtures/?event={gw}")
+    print(f"[live] fetch_fixtures_for_gw gw={gw} count={len(fixtures)}")
+    return fixtures
 
 
 async def fetch_bootstrap_maps() -> Tuple[Dict[int, Dict[str, Any]], Dict[int, Dict[str, Any]]]:
@@ -46,7 +54,9 @@ async def fetch_bootstrap_maps() -> Tuple[Dict[int, Dict[str, Any]], Dict[int, D
 
 async def fetch_live_points_map(gw: int) -> Dict[int, int]:
     live = await fetch_fpl_data(f"event/{gw}/live/")
-    return {e["id"]: e["stats"].get("total_points", 0) for e in live.get("elements", [])}
+    mapping = {e["id"]: e["stats"].get("total_points", 0) for e in live.get("elements", [])}
+    print(f"[live] fetch_live_points_map gw={gw} elements={len(mapping)}")
+    return mapping
 
 
 def _collect_counts(fixture: Dict[str, Any]) -> Dict[Tuple[str, int], int]:
@@ -92,13 +102,46 @@ def _stat_emoji(ident: str) -> str:
     }.get(ident, "ℹ️")
 
 
-async def extract_fixture_deltas(fixture: Dict[str, Any]) -> Dict[str, List[int]]:
+async def extract_fixture_deltas(
+    fixture: Dict[str, Any],
+    elements_by_id: Optional[Dict[int, Dict[str, Any]]] = None,
+) -> Dict[str, List[int]]:
     fixture_id = fixture["id"]
+    # Log compact view of goals/assists/card stats as seen in this tick
+    def _fmt_entries(side_rows):
+        return [(row.get("element"), row.get("value")) for row in (side_rows or [])]
+    try:
+        gs = next((s for s in fixture.get("stats", []) if s.get("identifier") == "goals_scored"), None)
+        asst = next((s for s in fixture.get("stats", []) if s.get("identifier") == "assists"), None)
+        yc = next((s for s in fixture.get("stats", []) if s.get("identifier") == "yellow_cards"), None)
+        rc = next((s for s in fixture.get("stats", []) if s.get("identifier") == "red_cards"), None)
+        print(
+            f"[live] stats fixture={fixture_id} "
+            f"goals.h={_fmt_entries(gs.get('h') if gs else [])} goals.a={_fmt_entries(gs.get('a') if gs else [])} "
+            f"assists.h={_fmt_entries(asst.get('h') if asst else [])} assists.a={_fmt_entries(asst.get('a') if asst else [])} "
+            f"yc.h={_fmt_entries(yc.get('h') if yc else [])} yc.a={_fmt_entries(yc.get('a') if yc else [])} "
+            f"rc.h={_fmt_entries(rc.get('h') if rc else [])} rc.a={_fmt_entries(rc.get('a') if rc else [])}"
+        )
+    except Exception as e:
+        print(f"[live] stats log error fixture={fixture_id}: {e}")
+
     counts = _collect_counts(fixture)
+    # On first processing of this fixture, baseline all counts (no emits), to avoid backfill spam.
+    initialized = await get_fixture_initialized(fixture_id)
+    if not initialized:
+        for (ident, el), cur in counts.items():
+            await set_seen_count(fixture_id, ident, el, cur)
+        await set_fixture_initialized(fixture_id, True)
+        print(f"[live] initialized baseline for fixture={fixture_id}")
+        return {}
     new: Dict[str, List[int]] = {}
     for (ident, el), cur in counts.items():
         prev = await get_seen_count(fixture_id, ident, el)
         if prev is None:
+            # Treat unseen as 0 now that fixture is initialized; emit increases
+            if cur > 0:
+                for _ in range(cur):
+                    new.setdefault(ident, []).append(el)
             await set_seen_count(fixture_id, ident, el, cur)
             continue
         if cur > prev:
@@ -108,6 +151,17 @@ async def extract_fixture_deltas(fixture: Dict[str, Any]) -> Dict[str, List[int]
         elif cur < prev:
             await set_seen_count(fixture_id, ident, el, cur)
             new.setdefault("modified", []).append(el)
+    if new:
+        # Detailed logging of new events with names if available
+        for ident, els in new.items():
+            lines = []
+            for el_id in els:
+                name = None
+                if elements_by_id:
+                    base = elements_by_id.get(el_id) or {}
+                    name = base.get("web_name") or base.get("second_name")
+                lines.append(f"{el_id}({name})" if name else str(el_id))
+            print(f"[live] deltas fixture={fixture_id} ident={ident} new={lines}")
     return new
 
 
@@ -202,22 +256,9 @@ def _pulse_match_id(fixture: Dict[str, Any]) -> Optional[int]:
 
 
 async def _fetch_pulse_dc_counts(pulse_match_id: int) -> Dict[int, int]:
-    url = f"{PULSE_API_BASE}match/{pulse_match_id}"
-    out: Dict[int, int] = {}
-    try:
-        async with aiohttp.ClientSession() as s:
-            async with s.get(url) as r:
-                r.raise_for_status()
-                data = await r.json()
-        for p in data.get("playerStats", []):
-            el_id = p.get("fplId") or p.get("elementId")
-            if not el_id:
-                continue
-            dc = int(p.get("stats", {}).get("defensiveContributions", 0) or 0)
-            out[int(el_id)] = dc
-    except Exception:
-        pass
-    return out
+    # Deprecated: we now derive defensive contribution (DC) directly from the FPL fixtures stats
+    # (identifier='defensive_contribution'). This function remains for reference but returns empty.
+    return {}
 
 
 def _defcon_threshold(element_type: int) -> int:
@@ -231,11 +272,20 @@ async def compute_defcon_threshold_hits(
     teams_by_id: Dict[int, Dict[str, Any]],
     gw: int,
 ) -> List[str]:
+    """Compute DefCon hits from FPL fixtures stats (identifier='defensive_contribution')."""
     msgs: List[str] = []
-    pmid = _pulse_match_id(fixture)
-    if not pmid:
-        return msgs
-    dc_counts = await _fetch_pulse_dc_counts(pmid)
+    # Build DC counts per element from the fixture stats (both sides)
+    dc_counts: Dict[int, int] = {}
+    for s in fixture.get("stats", []):
+        if s.get("identifier") == "defensive_contribution":
+            for side in ("a", "h"):
+                for row in s.get(side, []) or []:
+                    el_id = int(row.get("element")) if row.get("element") is not None else None
+                    if el_id is None:
+                        continue
+                    val = int(row.get("value", 0) or 0)
+                    dc_counts[el_id] = dc_counts.get(el_id, 0) + val
+
     if not dc_counts:
         return msgs
 
@@ -244,19 +294,21 @@ async def compute_defcon_threshold_hits(
     sl = f"{hsn} {fixture.get('team_h_score', 0)}–{fixture.get('team_a_score', 0)} {asn}"
 
     for el_id, dc in dc_counts.items():
-        el = elements_by_id.get(int(el_id))
+        el = elements_by_id.get(el_id)
         if not el:
             continue
         need = _defcon_threshold(el["element_type"])
-        row = await get_dc_row(fixture["id"], int(el_id))
+        row = await get_dc_row(fixture["id"], el_id)
         prev = row[0] if row else 0
         already = bool(row[1]) if row else False
 
         hit_now = (dc >= need) and not already
-        await upsert_dc_row(fixture["id"], int(el_id), dc, already or hit_now)
+        await upsert_dc_row(fixture["id"], el_id, dc, already or hit_now)
         if hit_now:
             name = _nice_name(el)
             msgs.append(f"DefCon hit! +2 pts\n🛡️ {name} — DC {dc}/{need}\n\n{sl}")
+    if msgs:
+        print(f"[live] defcon hits from fixture stats: {len(msgs)}")
     return msgs
 
 

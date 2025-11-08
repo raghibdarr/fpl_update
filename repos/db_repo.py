@@ -90,6 +90,12 @@ async def setup_database():
                 PRIMARY KEY (guild_id, channel_id, fixture_id)
             )
         ''')
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS live_fixture_seen (
+                fixture_id INTEGER PRIMARY KEY,
+                init_done INTEGER
+            )
+        ''')
         await db.commit()
 
 
@@ -240,4 +246,18 @@ async def get_bonus_sent(guild_id: int, channel_id: int, fixture_id: int) -> boo
 async def set_bonus_sent(guild_id: int, channel_id: int, fixture_id: int, sent: bool) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute('INSERT OR REPLACE INTO live_bonus_sent_v2 (guild_id, channel_id, fixture_id, sent) VALUES (?, ?, ?, ?)', (guild_id, channel_id, fixture_id, 1 if sent else 0))
+        await db.commit()
+
+
+# Fixture initialization (baseline) flags for delta logic
+async def get_fixture_initialized(fixture_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute('SELECT init_done FROM live_fixture_seen WHERE fixture_id = ?', (fixture_id,)) as cursor:
+            row = await cursor.fetchone()
+            return bool(row[0]) if row else False
+
+
+async def set_fixture_initialized(fixture_id: int, init_done: bool) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('INSERT OR REPLACE INTO live_fixture_seen (fixture_id, init_done) VALUES (?, ?)', (fixture_id, 1 if init_done else 0))
         await db.commit()

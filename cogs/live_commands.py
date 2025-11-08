@@ -23,7 +23,7 @@ from services.live_service import (
 )
 
 
-POLL_SECONDS = 60
+POLL_SECONDS = 30
 
 
 class LiveCommands(commands.Cog):
@@ -36,6 +36,13 @@ class LiveCommands(commands.Cog):
         # simple anti-spam: track last command timestamps per (guild, channel)
         self._last_subscribe_ts: dict[tuple[int, int], float] = {}
         self._last_unsubscribe_ts: dict[tuple[int, int], float] = {}
+        # last tick time (epoch seconds)
+        self._last_tick_ts = None
+        # Ensure loop auto-starts if there are existing subscriptions in DB
+        try:
+            self.bot.loop.create_task(self._startup_check())
+        except Exception as e:
+            print(f"[live] failed to schedule startup check: {e}")
 
     @commands.hybrid_command(name="live_subscribe", description="Post live FPL match updates in this channel")
     async def live_subscribe(self, ctx: commands.Context):
@@ -73,6 +80,11 @@ class LiveCommands(commands.Cog):
         if not self._loop_started:
             self._loop.start()
             self._loop_started = True
+        # Run an immediate tick so you don't have to wait for the next interval
+        try:
+            await self._run_tick()
+        except Exception as e:
+            print(f"[live_subscribe] immediate tick error: {e}")
 
     @commands.hybrid_command(name="live_unsubscribe", description="Stop live FPL updates in this channel")
     async def live_unsubscribe(self, ctx: commands.Context):
@@ -89,58 +101,84 @@ class LiveCommands(commands.Cog):
         await ctx.send(f"Live updates unsubscribed for {ctx.channel.mention}.")
         self._last_unsubscribe_ts[key] = now
 
-    @tasks.loop(seconds=POLL_SECONDS)
-    async def _loop(self):
+    async def _run_tick(self):
         try:
             subs_raw = await get_all_live_subscriptions()
             subs: List[Tuple[int, int]] = [(g, c) for (g, c, _ts) in subs_raw]
+            import time
+            self._last_tick_ts = time.time()
+            print(f"[live] tick; subs={len(subs_raw)}")
             if not subs:
                 return
 
             gw = await fetch_current_gw()
+            print(f"[live] current_gw={gw}")
             if gw is None:
                 return
 
             if self._bootstrap is None or self._gw_cache != gw:
                 self._bootstrap = await fetch_bootstrap_maps()
                 self._gw_cache = gw
+                print("[live] bootstrap loaded/cached")
 
             elements_by_id, teams_by_id = self._bootstrap
             fixtures = await fetch_fixtures_for_gw(gw)
+            print(f"[live] fixtures count={len(fixtures) if fixtures else 0}")
             if not fixtures:
                 return
 
             live_points = await fetch_live_points_map(gw)
+            print(f"[live] live_points loaded elements={len(live_points)}")
 
             for fx in fixtures:
-                # Treat as live while started and not finished_provisional
-                if not fx.get("started") or fx.get("finished_provisional"):
-                    # If just finished, maybe emit bonus once (only if fixture finished after subscribe time)
+                fid = fx.get("id")
+                started = bool(fx.get("started"))
+                finished = bool(fx.get("finished_provisional"))
+                print(f"[live] fixture id={fid} started={started} finished_provisional={finished}")
+
+                # Finished: maybe send bonus once per channel
+                if not started or finished:
                     bonus_msg = await maybe_emit_bonus_when_finished(fx, elements_by_id, teams_by_id, live_points)
                     if bonus_msg:
+                        print(f"[live] bonus ready for fixture={fid}")
                         for guild_id, channel_id in subs:
-                            # filter by subscribe time and per-guild sent flag
                             try:
                                 sub_ts = next((ts for (g, c, ts) in subs_raw if g == guild_id and c == channel_id), 0)
                             except Exception:
                                 sub_ts = 0
-                            kickoff = fx.get("kickoff_time")
-                            # safe: when kickoff_time isn't available, allow
-                            if sub_ts:
-                                # allow only if this fixture finished after subscribe_ts
-                                # finished_provisional implies now>=finish; we approximate with started true and rely on not backfilling
-                                pass
-                            if await get_bonus_sent(guild_id, channel_id, fx["id"]):
+                            if await get_bonus_sent(guild_id, channel_id, fid):
                                 continue
                             ch = self.bot.get_channel(channel_id)
                             if ch:
+                                print(f"[live] sending bonus to guild={guild_id} channel={channel_id}")
                                 await ch.send(bonus_msg)
-                                await set_bonus_sent(guild_id, channel_id, fx["id"], True)
+                                await set_bonus_sent(guild_id, channel_id, fid, True)
                     continue
 
-                deltas = await extract_fixture_deltas(fx)
+                # Live: deltas
+                deltas = await extract_fixture_deltas(fx, elements_by_id)
                 if deltas:
+                    print(f"[live] deltas fixture={fid} keys={[k for k in deltas.keys()]}")
                     paired = pair_scorers_assisters(deltas)
+                    # Log pairing decisions
+                    try:
+                        pairs = []
+                        goals_only = []
+                        assists_only = []
+                        for it in paired:
+                            if it["type"] == "goal_assist":
+                                s = elements_by_id.get(it["scorer"], {}).get("web_name", it["scorer"])
+                                a = elements_by_id.get(it["assister"], {}).get("web_name", it["assister"])
+                                pairs.append((s, a))
+                            elif it["type"] == "goal":
+                                s = elements_by_id.get(it["scorer"], {}).get("web_name", it["scorer"])
+                                goals_only.append(s)
+                            elif it["type"] == "assist":
+                                a = elements_by_id.get(it["assister"], {}).get("web_name", it["assister"])
+                                assists_only.append(a)
+                        print(f"[live] pairing fixture={fid} pairs={pairs} goals_only={goals_only} assists_only={assists_only}")
+                    except Exception as e:
+                        print(f"[live] pairing log error fixture={fid}: {e}")
                     msgs = []
                     for item in paired:
                         msg = format_event_message(
@@ -156,19 +194,47 @@ class LiveCommands(commands.Cog):
                         for _, channel_id in subs:
                             ch = self.bot.get_channel(channel_id)
                             if ch:
+                                print(f"[live] sending {len(msgs)} event(s) to channel={channel_id}")
                                 for m in msgs:
                                     await ch.send(m)
 
                 # DefCon thresholds via Pulse
                 dc_msgs = await compute_defcon_threshold_hits(fx, elements_by_id, teams_by_id, gw)
                 if dc_msgs:
+                    print(f"[live] defcon msgs={len(dc_msgs)} for fixture={fid}")
                     for _, channel_id in subs:
                         ch = self.bot.get_channel(channel_id)
                         if ch:
                             for m in dc_msgs:
                                 await ch.send(m)
         except Exception as e:
-            print(f"[live_loop] error: {e}")
+            print(f"[live] tick error: {e}")
+
+    @tasks.loop(seconds=POLL_SECONDS, reconnect=True)
+    async def _loop(self):
+        await self._run_tick()
+
+    @_loop.before_loop
+    async def _before_loop(self):
+        print("[live] waiting for bot ready before starting loop...")
+        await self.bot.wait_until_ready()
+        print("[live] loop starting")
+
+    @_loop.after_loop
+    async def _after_loop(self):
+        print("[live] loop stopped")
+
+    async def _startup_check(self):
+        # Auto-start the loop if any subscriptions exist when the cog loads
+        await self.bot.wait_until_ready()
+        try:
+            subs_raw = await get_all_live_subscriptions()
+            if subs_raw and not self._loop.is_running():
+                print(f"[live] auto-starting loop on startup; subs={len(subs_raw)}")
+                self._loop.start()
+                self._loop_started = True
+        except Exception as e:
+            print(f"[live] startup_check error: {e}")
 
 
     @commands.hybrid_command(name="subscribed_channels", description="List channels in this guild receiving live updates")
@@ -192,6 +258,40 @@ class LiveCommands(commands.Cog):
         except Exception as e:
             print(f"[subscribed_channels] error: {e}")
             await ctx.send("Could not fetch subscribed channels right now.")
+
+    @commands.hybrid_command(name="live_poll_now", description="Run a live poll tick now (debug)")
+    async def live_poll_now(self, ctx: commands.Context):
+        await ctx.defer()
+        await self._run_tick()
+        await ctx.send("Live tick executed (see console logs).")
+
+    @commands.hybrid_command(name="live_loop_status", description="Show live loop status and last tick time")
+    async def live_loop_status(self, ctx: commands.Context):
+        import time
+        running = self._loop.is_running()
+        if self._last_tick_ts:
+            ago = int(time.time() - self._last_tick_ts)
+            await ctx.send(f"Loop running: {running}. Last tick {ago}s ago. Interval={POLL_SECONDS}s")
+        else:
+            await ctx.send(f"Loop running: {running}. No tick yet. Interval={POLL_SECONDS}s")
+
+    @commands.hybrid_command(name="live_loop_start", description="Manually start the live poll loop (admin/debug)")
+    async def live_loop_start(self, ctx: commands.Context):
+        if not self._loop.is_running():
+            self._loop.start()
+            self._loop_started = True
+            await ctx.send("Live loop started.")
+        else:
+            await ctx.send("Live loop is already running.")
+
+    @commands.hybrid_command(name="live_loop_stop", description="Manually stop the live poll loop (admin/debug)")
+    async def live_loop_stop(self, ctx: commands.Context):
+        if self._loop.is_running():
+            self._loop.cancel()
+            self._loop_started = False
+            await ctx.send("Live loop stopped.")
+        else:
+            await ctx.send("Live loop is not running.")
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(LiveCommands(bot))
