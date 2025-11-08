@@ -17,6 +17,7 @@ from services.live_service import (
     fetch_live_points_map,
     extract_fixture_deltas,
     pair_scorers_assisters,
+    compute_defcon_threshold_events,
     compute_defcon_threshold_hits,
     format_event_message,
     maybe_emit_bonus_when_finished,
@@ -43,6 +44,8 @@ class LiveCommands(commands.Cog):
             self.bot.loop.create_task(self._startup_check())
         except Exception as e:
             print(f"[live] failed to schedule startup check: {e}")
+        # Pending goal/assist to allow pairing on the next tick: {fixture_id: {"goals":[el_ids], "assists":[el_ids], "ts":float}}
+        self._pending_pairing: dict[int, dict[str, object]] = {}
 
     @commands.hybrid_command(name="live_subscribe", description="Post live FPL match updates in this channel")
     async def live_subscribe(self, ctx: commands.Context):
@@ -153,60 +156,141 @@ class LiveCommands(commands.Cog):
                                 print(f"[live] sending bonus to guild={guild_id} channel={channel_id}")
                                 await ch.send(bonus_msg)
                                 await set_bonus_sent(guild_id, channel_id, fid, True)
+                            # DefCon summary for the finished fixture (all hits, no ownership filter)
+                            try:
+                                from repos.db_repo import list_dc_hits_for_fixture, get_defcon_summary_sent, set_defcon_summary_sent
+                                if not await get_defcon_summary_sent(guild_id, channel_id, fid):
+                                    rows = await list_dc_hits_for_fixture(fid)
+                                    if rows:
+                                        header = f"{teams_by_id.get(fx['team_h'], {}).get('short_name','H')} {fx.get('team_h_score',0)}–{fx.get('team_a_score',0)} {teams_by_id.get(fx['team_a'], {}).get('short_name','A')}"
+                                        desc_lines = []
+                                        for (el_id, dc) in rows:
+                                            el = elements_by_id.get(el_id, {})
+                                            name = el.get('web_name') or el.get('second_name') or str(el_id)
+                                            need = 10 if el.get('element_type') == 2 else 12
+                                            desc_lines.append(f"🛡️ DefCon +2 | {name} — DC {dc}/{need}")
+                                        if desc_lines:
+                                            embed = discord.Embed(title=f"{header} — DefCon summary", description="\n".join(desc_lines), colour=discord.Color.teal())
+                                            await ch.send(embed=embed)
+                                            await set_defcon_summary_sent(guild_id, channel_id, fid, True)
+                            except Exception as e:
+                                print(f"[live] defcon summary error fixture={fid}: {e}")
                     continue
 
                 # Live: deltas
+                import time
                 deltas = await extract_fixture_deltas(fx, elements_by_id)
+                lines_by_fixture: list[str] = []
                 if deltas:
                     print(f"[live] deltas fixture={fid} keys={[k for k in deltas.keys()]}")
-                    paired = pair_scorers_assisters(deltas)
-                    # Log pairing decisions
+                    # Goal/assist delayed pairing across ticks
+                    current_goals = list(deltas.get("goals_scored", []))
+                    current_assists = list(deltas.get("assists", []))
+                    prev = self._pending_pairing.get(fid, {"goals": [], "assists": [], "ts": time.time()})
+                    prev_goals = list(prev.get("goals", []))  # type: ignore
+                    prev_assists = list(prev.get("assists", []))  # type: ignore
+                    # Pair using prev with current first
+                    paired_items = []
+                    # pair prev_goals with current_assists
+                    while prev_goals and current_assists:
+                        g = prev_goals.pop(0)
+                        a = current_assists.pop(0)
+                        paired_items.append({"type": "goal_assist", "scorer": g, "assister": a})
+                    # pair prev_assists with current_goals
+                    while prev_assists and current_goals:
+                        a = prev_assists.pop(0)
+                        g = current_goals.pop(0)
+                        paired_items.append({"type": "goal_assist", "scorer": g, "assister": a})
+                    # If any prev remained unpaired after one tick, emit them now
+                    stale_unpaired: list[dict] = []
+                    for g in prev_goals:
+                        stale_unpaired.append({"type": "goal", "scorer": g})
+                    for a in prev_assists:
+                        stale_unpaired.append({"type": "assist", "assister": a})
+                    # Now, DO NOT emit current unpaired yet; store for next tick
+                    self._pending_pairing[fid] = {"goals": current_goals, "assists": current_assists, "ts": time.time()}
+                    # Build compact lines for paired + stale unpaired
+                    def _line_for_item(item: dict) -> str:
+                        header = ""  # we will send a single embed with header; lines only
+                        if item["type"] == "goal_assist":
+                            s = elements_by_id.get(item["scorer"], {}).get("web_name", item["scorer"])
+                            a = elements_by_id.get(item["assister"], {}).get("web_name", item["assister"])
+                            s_tot = live_points.get(item["scorer"], 0)
+                            a_tot = live_points.get(item["assister"], 0)
+                            return f"⚽ GOAL | {s} — Total: {s_tot} pts.\n🅰️ ASSIST | {a} — Total: {a_tot} pts."
+                        if item["type"] == "goal":
+                            s = elements_by_id.get(item["scorer"], {}).get("web_name", item["scorer"])
+                            s_tot = live_points.get(item["scorer"], 0)
+                            return f"⚽ GOAL | {s} — Total: {s_tot} pts."
+                        if item["type"] == "assist":
+                            a = elements_by_id.get(item["assister"], {}).get("web_name", item["assister"])
+                            a_tot = live_points.get(item["assister"], 0)
+                            return f"🅰️ ASSIST | {a} — Total: {a_tot} pts."
+                        if item["type"] == "yellow_cards":
+                            p = elements_by_id.get(item["player"], {}).get("web_name", item["player"])
+                            t = live_points.get(item["player"], 0)
+                            return f"🟨 Yellow card | {p} — Total: {t} pts."
+                        if item["type"] == "red_cards":
+                            p = elements_by_id.get(item["player"], {}).get("web_name", item["player"])
+                            t = live_points.get(item["player"], 0)
+                            return f"🟥 Red card | {p} — Total: {t} pts."
+                        if item["type"] == "own_goals":
+                            p = elements_by_id.get(item["player"], {}).get("web_name", item["player"])
+                            t = live_points.get(item["player"], 0)
+                            return f"🥅 Own goal | {p} — Total: {t} pts."
+                        if item["type"] == "penalties_saved":
+                            p = elements_by_id.get(item["player"], {}).get("web_name", item["player"])
+                            t = live_points.get(item["player"], 0)
+                            return f"🧤 Penalty saved | {p} — Total: {t} pts."
+                        if item["type"] == "penalties_missed":
+                            p = elements_by_id.get(item["player"], {}).get("web_name", item["player"])
+                            t = live_points.get(item["player"], 0)
+                            return f"❌ Penalty missed | {p} — Total: {t} pts."
+                        return ""
+                    # Log and collect lines
                     try:
-                        pairs = []
-                        goals_only = []
-                        assists_only = []
-                        for it in paired:
-                            if it["type"] == "goal_assist":
-                                s = elements_by_id.get(it["scorer"], {}).get("web_name", it["scorer"])
-                                a = elements_by_id.get(it["assister"], {}).get("web_name", it["assister"])
-                                pairs.append((s, a))
-                            elif it["type"] == "goal":
-                                s = elements_by_id.get(it["scorer"], {}).get("web_name", it["scorer"])
-                                goals_only.append(s)
-                            elif it["type"] == "assist":
-                                a = elements_by_id.get(it["assister"], {}).get("web_name", it["assister"])
-                                assists_only.append(a)
-                        print(f"[live] pairing fixture={fid} pairs={pairs} goals_only={goals_only} assists_only={assists_only}")
-                    except Exception as e:
-                        print(f"[live] pairing log error fixture={fid}: {e}")
-                    msgs = []
-                    for item in paired:
-                        msg = format_event_message(
-                            item=item,
-                            fixture=fx,
-                            elements_by_id=elements_by_id,
-                            teams_by_id=teams_by_id,
-                            live_points=live_points,
-                        )
-                        if msg:
-                            msgs.append(msg)
-                    if msgs:
-                        for _, channel_id in subs:
-                            ch = self.bot.get_channel(channel_id)
-                            if ch:
-                                print(f"[live] sending {len(msgs)} event(s) to channel={channel_id}")
-                                for m in msgs:
-                                    await ch.send(m)
-
-                # DefCon thresholds via Pulse
-                dc_msgs = await compute_defcon_threshold_hits(fx, elements_by_id, teams_by_id, gw)
-                if dc_msgs:
-                    print(f"[live] defcon msgs={len(dc_msgs)} for fixture={fid}")
+                        print(f"[live] pairing fixture={fid} carryover -> emit now: {len(stale_unpaired)}, new pairs: {len(paired_items)}")
+                    except Exception:
+                        pass
+                    for it in stale_unpaired + paired_items:
+                        ln = _line_for_item(it)
+                        if ln:
+                            lines_by_fixture.append(ln)
+                    # Immediately handled events (no delay): cards & misc
+                    MIN_YC_SELECTED = 1.0
+                    for key in ("yellow_cards", "red_cards", "own_goals", "penalties_saved", "penalties_missed", "modified"):
+                        for pid in deltas.get(key, []):
+                            # Ownership filter for yellow cards only
+                            if key == "yellow_cards":
+                                try:
+                                    base = elements_by_id.get(pid, {})  # type: ignore
+                                    sel_raw = str(base.get("selected_by_percent", "0"))
+                                    sel = float(sel_raw.replace("%", "")) if isinstance(sel_raw, str) else float(sel_raw)
+                                except Exception:
+                                    sel = 0.0
+                                if sel < MIN_YC_SELECTED:
+                                    continue
+                            ln = _line_for_item({"type": key, "player": pid})
+                            if ln:
+                                lines_by_fixture.append(ln)
+                # Send one embed per fixture for compactness
+                if lines_by_fixture:
+                    header = f"{teams_by_id.get(fx['team_h'], {}).get('short_name','H')} {fx.get('team_h_score',0)}–{fx.get('team_a_score',0)} {teams_by_id.get(fx['team_a'], {}).get('short_name','A')}"
+                    embed = discord.Embed(title=header, description="\n".join(lines_by_fixture), colour=discord.Color.blurple())
                     for _, channel_id in subs:
                         ch = self.bot.get_channel(channel_id)
                         if ch:
-                            for m in dc_msgs:
-                                await ch.send(m)
+                            await ch.send(embed=embed)
+
+                # DefCon thresholds (filter by ownership >= 1% for live ticker), embedded within the same fixture embed
+                defcon_events = await compute_defcon_threshold_events(fx, elements_by_id, teams_by_id, gw, min_selected_percent=1.0)
+                if defcon_events:
+                    for ev in defcon_events:
+                        pid = ev["player"]
+                        name = ev["name"]
+                        dc = ev["dc"]
+                        need = ev["need"]
+                        lines_by_fixture.append(f"🛡️ DefCon +2 | {name} — DC {dc}/{need}")
         except Exception as e:
             print(f"[live] tick error: {e}")
 

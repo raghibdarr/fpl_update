@@ -261,3 +261,32 @@ async def set_fixture_initialized(fixture_id: int, init_done: bool) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute('INSERT OR REPLACE INTO live_fixture_seen (fixture_id, init_done) VALUES (?, ?)', (fixture_id, 1 if init_done else 0))
         await db.commit()
+
+# List all DefCon hits recorded for a fixture (players who reached threshold)
+async def list_dc_hits_for_fixture(fixture_id: int):
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute('SELECT element, count FROM live_dc WHERE fixture_id = ? AND hit_sent = 1', (fixture_id,)) as cursor:
+            return await cursor.fetchall()
+
+# Per-guild/channel DefCon summary sent flags
+async def get_defcon_summary_sent(guild_id: int, channel_id: int, fixture_id: int) -> bool:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS live_defcon_summary_sent_v2 (
+                guild_id INTEGER,
+                channel_id INTEGER,
+                fixture_id INTEGER,
+                sent INTEGER,
+                PRIMARY KEY (guild_id, channel_id, fixture_id)
+            )
+        ''')
+        await db.commit()
+        async with db.execute('SELECT sent FROM live_defcon_summary_sent_v2 WHERE guild_id = ? AND channel_id = ? AND fixture_id = ?', (guild_id, channel_id, fixture_id)) as cursor:
+            row = await cursor.fetchone()
+            return bool(row[0]) if row else False
+
+
+async def set_defcon_summary_sent(guild_id: int, channel_id: int, fixture_id: int, sent: bool) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('INSERT OR REPLACE INTO live_defcon_summary_sent_v2 (guild_id, channel_id, fixture_id, sent) VALUES (?, ?, ?, ?)', (guild_id, channel_id, fixture_id, 1 if sent else 0))
+        await db.commit()

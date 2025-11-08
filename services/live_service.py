@@ -272,6 +272,55 @@ def _defcon_threshold(element_type: int) -> int:
     return 10 if element_type == 2 else 12
 
 
+async def compute_defcon_threshold_events(
+    fixture: Dict[str, Any],
+    elements_by_id: Dict[int, Dict[str, Any]],
+    teams_by_id: Dict[int, Dict[str, Any]],
+    gw: int,
+    min_selected_percent: float | None = None,
+) -> List[Dict[str, Any]]:
+    """Return structured DefCon hit events (and persist hit_sent)."""
+    events: List[Dict[str, Any]] = []
+    # Build DC counts per element from the fixture stats
+    dc_counts: Dict[int, int] = {}
+    for s in fixture.get("stats", []):
+        if s.get("identifier") == "defensive_contribution":
+            for side in ("a", "h"):
+                for row in s.get(side, []) or []:
+                    el_id = int(row.get("element")) if row.get("element") is not None else None
+                    if el_id is None:
+                        continue
+                    val = int(row.get("value", 0) or 0)
+                    dc_counts[el_id] = dc_counts.get(el_id, 0) + val
+
+    for el_id, dc in dc_counts.items():
+        el = elements_by_id.get(el_id)
+        if not el:
+            continue
+        need = _defcon_threshold(el["element_type"])
+        row = await get_dc_row(fixture["id"], el_id)
+        already = bool(row[1]) if row else False
+        hit_now = (dc >= need) and not already
+        await upsert_dc_row(fixture["id"], el_id, dc, already or hit_now)
+        if hit_now:
+            # Ownership filter (if provided)
+            if min_selected_percent is not None:
+                try:
+                    sel = float(str(el.get("selected_by_percent", "0")).replace("%", ""))
+                except Exception:
+                    sel = 0.0
+                if sel < min_selected_percent:
+                    # skip live ticker, still persisted for summary
+                    continue
+            events.append({
+                "type": "defcon",
+                "player": el_id,
+                "name": el.get("web_name") or el.get("second_name") or "Unknown",
+                "dc": dc,
+                "need": need,
+            })
+    return events
+
 async def compute_defcon_threshold_hits(
     fixture: Dict[str, Any],
     elements_by_id: Dict[int, Dict[str, Any]],
