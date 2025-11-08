@@ -141,8 +141,8 @@ class LiveCommands(commands.Cog):
 
                 # Finished: maybe send bonus once per channel
                 if not started or finished:
-                    bonus_msg = await maybe_emit_bonus_when_finished(fx, elements_by_id, teams_by_id, live_points)
-                    if bonus_msg:
+                    bonus_payload = await maybe_emit_bonus_when_finished(fx, elements_by_id, teams_by_id, live_points)
+                    if bonus_payload:
                         print(f"[live] bonus ready for fixture={fid}")
                         for guild_id, channel_id in subs:
                             try:
@@ -154,7 +154,12 @@ class LiveCommands(commands.Cog):
                             ch = self.bot.get_channel(channel_id)
                             if ch:
                                 print(f"[live] sending bonus to guild={guild_id} channel={channel_id}")
-                                await ch.send(bonus_msg)
+                                embed = discord.Embed(
+                                    title=bonus_payload.get("title") or "Provisional bonus (BPS)",
+                                    description=bonus_payload.get("description") or "",
+                                    colour=discord.Color.gold(),
+                                )
+                                await ch.send(embed=embed)
                                 await set_bonus_sent(guild_id, channel_id, fid, True)
                             # DefCon summary for the finished fixture (all hits, no ownership filter)
                             try:
@@ -164,11 +169,24 @@ class LiveCommands(commands.Cog):
                                     if rows:
                                         header = f"{teams_by_id.get(fx['team_h'], {}).get('short_name','H')} {fx.get('team_h_score',0)}–{fx.get('team_a_score',0)} {teams_by_id.get(fx['team_a'], {}).get('short_name','A')}"
                                         desc_lines = []
+                                        # parse awards mapping for totals
+                                        awards_raw = (bonus_payload.get("awards") or "")
+                                        awards_map = {}
+                                        try:
+                                            for pair in awards_raw.split(","):
+                                                if not pair:
+                                                    continue
+                                                el_s, pts_s = pair.split(":")
+                                                awards_map[int(el_s)] = int(pts_s)
+                                        except Exception:
+                                            awards_map = {}
                                         for (el_id, dc) in rows:
                                             el = elements_by_id.get(el_id, {})
                                             name = el.get('web_name') or el.get('second_name') or str(el_id)
                                             need = 10 if el.get('element_type') == 2 else 12
-                                            desc_lines.append(f"🛡️ DefCon +2 | {name} — DC {dc}/{need}")
+                                            base_tot = live_points.get(el_id, 0)
+                                            tot = base_tot + awards_map.get(el_id, 0)
+                                            desc_lines.append(f"🛡️ {name} — DC {dc}/{need} — Total: {tot}")
                                         if desc_lines:
                                             embed = discord.Embed(title=f"{header} — DefCon summary", description="\n".join(desc_lines), colour=discord.Color.teal())
                                             await ch.send(embed=embed)
@@ -201,13 +219,19 @@ class LiveCommands(commands.Cog):
                         a = prev_assists.pop(0)
                         g = current_goals.pop(0)
                         paired_items.append({"type": "goal_assist", "scorer": g, "assister": a})
+                    # Also pair any remaining current goals/assists within the SAME tick
+                    # (so we don't delay when both arrive together)
+                    while current_goals and current_assists:
+                        g = current_goals.pop(0)
+                        a = current_assists.pop(0)
+                        paired_items.append({"type": "goal_assist", "scorer": g, "assister": a})
                     # If any prev remained unpaired after one tick, emit them now
                     stale_unpaired: list[dict] = []
                     for g in prev_goals:
                         stale_unpaired.append({"type": "goal", "scorer": g})
                     for a in prev_assists:
                         stale_unpaired.append({"type": "assist", "assister": a})
-                    # Now, DO NOT emit current unpaired yet; store for next tick
+                    # Now, DO NOT emit remaining current unpaired (if any) yet; store for next tick
                     self._pending_pairing[fid] = {"goals": current_goals, "assists": current_assists, "ts": time.time()}
                     # Build compact lines for paired + stale unpaired
                     def _line_for_item(item: dict) -> str:

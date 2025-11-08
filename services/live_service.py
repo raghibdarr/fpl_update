@@ -372,7 +372,7 @@ async def maybe_emit_bonus_when_finished(
     elements_by_id: Dict[int, Dict[str, Any]],
     teams_by_id: Dict[int, Dict[str, Any]],
     live_points: Dict[int, int] | None = None,
-) -> Optional[str]:
+) -> Optional[Dict[str, str]]:
     if not fixture.get("finished_provisional"):
         return None
     if await get_finished_sent(fixture["id"]):
@@ -447,8 +447,17 @@ async def maybe_emit_bonus_when_finished(
                 names.append(f"{nm} ({bps})")
         pretty_lines.append(f"{medal[pts]} {pts} pts: "+", ".join(names))
 
-    msg = header + "\n" + "\n".join(pretty_lines)
+    payload: Dict[str, str] = {
+        "title": header,
+        "description": "\n".join(pretty_lines),
+    }
+    # include raw awards mapping for downstream totals in summaries
+    try:
+        # serialize as el_id:points comma list for lightweight pass-through
+        payload["awards"] = ",".join(f"{el}:{pts}" for el, pts in award.items())
+    except Exception:
+        pass
     await set_finished_sent(fixture["id"], True)
-    return msg
+    return payload
 
 
