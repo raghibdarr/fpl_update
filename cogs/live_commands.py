@@ -2,6 +2,7 @@ import asyncio
 from typing import List, Tuple
 import discord
 from discord.ext import commands, tasks
+from datetime import datetime, timezone
 
 from repos.db_repo import (
     upsert_live_subscription,
@@ -12,6 +13,7 @@ from repos.db_repo import (
 )
 from services.live_service import (
     fetch_current_gw,
+    fetch_next_gw,
     fetch_fixtures_for_gw,
     fetch_bootstrap_maps,
     fetch_live_points_map,
@@ -24,7 +26,7 @@ from services.live_service import (
 )
 
 
-POLL_SECONDS = 30
+POLL_SECONDS = 15
 
 
 class LiveCommands(commands.Cog):
@@ -45,7 +47,12 @@ class LiveCommands(commands.Cog):
         except Exception as e:
             print(f"[live] failed to schedule startup check: {e}")
         # Pending goal/assist to allow pairing on the next tick: {fixture_id: {"goals":[el_ids], "assists":[el_ids], "ts":float}}
+        # We track (element_id, first_tick_seen) to bound delay.
         self._pending_pairing: dict[int, dict[str, object]] = {}
+        # Global loop tick counter
+        self._tick_counter: int = 0
+        # Adaptive polling idle target timestamp (epoch seconds) when no live fixtures
+        self._idle_until: float | None = None
 
     @commands.hybrid_command(name="live_subscribe", description="Post live FPL match updates in this channel")
     async def live_subscribe(self, ctx: commands.Context):
@@ -109,6 +116,7 @@ class LiveCommands(commands.Cog):
             subs_raw = await get_all_live_subscriptions()
             subs: List[Tuple[int, int]] = [(g, c) for (g, c, _ts) in subs_raw]
             import time
+            self._tick_counter += 1
             self._last_tick_ts = time.time()
             print(f"[live] tick; subs={len(subs_raw)}")
             if not subs:
@@ -129,7 +137,8 @@ class LiveCommands(commands.Cog):
             print(f"[live] fixtures count={len(fixtures) if fixtures else 0}")
             if not fixtures:
                 return
-
+            live_count = 0
+            next_kick_ts: float | None = None
             live_points = await fetch_live_points_map(gw)
             print(f"[live] live_points loaded elements={len(live_points)}")
 
@@ -138,6 +147,20 @@ class LiveCommands(commands.Cog):
                 started = bool(fx.get("started"))
                 finished = bool(fx.get("finished_provisional"))
                 print(f"[live] fixture id={fid} started={started} finished_provisional={finished}")
+
+                # Track whether any fixtures are live; compute next kickoff for idle scheduling
+                if started and not finished:
+                    live_count += 1
+                if not started:
+                    try:
+                        ko = fx.get("kickoff_time")
+                        if ko:
+                            dt = datetime.strptime(ko, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                            ts = dt.timestamp()
+                            if next_kick_ts is None or ts < next_kick_ts:
+                                next_kick_ts = ts
+                    except Exception:
+                        pass
 
                 # Finished: maybe send bonus once per channel
                 if not started or finished:
@@ -202,37 +225,49 @@ class LiveCommands(commands.Cog):
                 if deltas:
                     print(f"[live] deltas fixture={fid} keys={[k for k in deltas.keys()]}")
                     # Goal/assist delayed pairing across ticks
-                    current_goals = list(deltas.get("goals_scored", []))
-                    current_assists = list(deltas.get("assists", []))
+                    current_goals_ids = list(deltas.get("goals_scored", []))
+                    current_assists_ids = list(deltas.get("assists", []))
+                    # Convert current to (id, first_tick)
+                    current_goals = [(gid, self._tick_counter) for gid in current_goals_ids]
+                    current_assists = [(aid, self._tick_counter) for aid in current_assists_ids]
                     prev = self._pending_pairing.get(fid, {"goals": [], "assists": [], "ts": time.time()})
-                    prev_goals = list(prev.get("goals", []))  # type: ignore
-                    prev_assists = list(prev.get("assists", []))  # type: ignore
+                    prev_goals: list[tuple[int, int]] = list(prev.get("goals", []))  # type: ignore
+                    prev_assists: list[tuple[int, int]] = list(prev.get("assists", []))  # type: ignore
                     # Pair using prev with current first
                     paired_items = []
                     # pair prev_goals with current_assists
                     while prev_goals and current_assists:
-                        g = prev_goals.pop(0)
-                        a = current_assists.pop(0)
-                        paired_items.append({"type": "goal_assist", "scorer": g, "assister": a})
+                        g_el, _g_tick = prev_goals.pop(0)
+                        a_el, _a_tick = current_assists.pop(0)
+                        paired_items.append({"type": "goal_assist", "scorer": g_el, "assister": a_el})
                     # pair prev_assists with current_goals
                     while prev_assists and current_goals:
-                        a = prev_assists.pop(0)
-                        g = current_goals.pop(0)
-                        paired_items.append({"type": "goal_assist", "scorer": g, "assister": a})
+                        a_el, _a_tick = prev_assists.pop(0)
+                        g_el, _g_tick = current_goals.pop(0)
+                        paired_items.append({"type": "goal_assist", "scorer": g_el, "assister": a_el})
                     # Also pair any remaining current goals/assists within the SAME tick
                     # (so we don't delay when both arrive together)
                     while current_goals and current_assists:
-                        g = current_goals.pop(0)
-                        a = current_assists.pop(0)
-                        paired_items.append({"type": "goal_assist", "scorer": g, "assister": a})
-                    # If any prev remained unpaired after one tick, emit them now
+                        g_el, _gt = current_goals.pop(0)
+                        a_el, _at = current_assists.pop(0)
+                        paired_items.append({"type": "goal_assist", "scorer": g_el, "assister": a_el})
+                    # If any prev remained unpaired beyond WAIT_TICKS, emit them now; else carry forward again
+                    WAIT_TICKS = 4
                     stale_unpaired: list[dict] = []
-                    for g in prev_goals:
-                        stale_unpaired.append({"type": "goal", "scorer": g})
-                    for a in prev_assists:
-                        stale_unpaired.append({"type": "assist", "assister": a})
-                    # Now, DO NOT emit remaining current unpaired (if any) yet; store for next tick
-                    self._pending_pairing[fid] = {"goals": current_goals, "assists": current_assists, "ts": time.time()}
+                    carry_goals: list[tuple[int, int]] = []
+                    carry_assists: list[tuple[int, int]] = []
+                    for g_el, g_tick in prev_goals:
+                        if (self._tick_counter - g_tick) >= WAIT_TICKS:
+                            stale_unpaired.append({"type": "goal", "scorer": g_el})
+                        else:
+                            carry_goals.append((g_el, g_tick))
+                    for a_el, a_tick in prev_assists:
+                        if (self._tick_counter - a_tick) >= WAIT_TICKS:
+                            stale_unpaired.append({"type": "assist", "assister": a_el})
+                        else:
+                            carry_assists.append((a_el, a_tick))
+                    # Now, DO NOT emit remaining current unpaired (if any) yet; store for next tick with their first_tick
+                    self._pending_pairing[fid] = {"goals": carry_goals + current_goals, "assists": carry_assists + current_assists, "ts": time.time()}
                     # Build compact lines for paired + stale unpaired
                     def _line_for_item(item: dict) -> str:
                         header = ""  # we will send a single embed with header; lines only
@@ -297,7 +332,17 @@ class LiveCommands(commands.Cog):
                             ln = _line_for_item({"type": key, "player": pid})
                             if ln:
                                 lines_by_fixture.append(ln)
-                # Send one embed per fixture for compactness
+                # DefCon thresholds (filter by ownership >= 1% for live ticker), add to same per-fixture embed
+                defcon_events = await compute_defcon_threshold_events(fx, elements_by_id, teams_by_id, gw, min_selected_percent=1.0)
+                if defcon_events:
+                    print(f"[live] defcon live events fixture={fid} count={len(defcon_events)}")
+                    for ev in defcon_events:
+                        name = ev["name"]
+                        dc = ev["dc"]
+                        need = ev["need"]
+                        lines_by_fixture.append(f"🛡️ DefCon +2 | {name} — DC {dc}/{need}")
+
+                # Send one embed per fixture for compactness (now includes DefCon lines too)
                 if lines_by_fixture:
                     header = f"{teams_by_id.get(fx['team_h'], {}).get('short_name','H')} {fx.get('team_h_score',0)}–{fx.get('team_a_score',0)} {teams_by_id.get(fx['team_a'], {}).get('short_name','A')}"
                     embed = discord.Embed(title=header, description="\n".join(lines_by_fixture), colour=discord.Color.blurple())
@@ -305,21 +350,53 @@ class LiveCommands(commands.Cog):
                         ch = self.bot.get_channel(channel_id)
                         if ch:
                             await ch.send(embed=embed)
-
-                # DefCon thresholds (filter by ownership >= 1% for live ticker), embedded within the same fixture embed
-                defcon_events = await compute_defcon_threshold_events(fx, elements_by_id, teams_by_id, gw, min_selected_percent=1.0)
-                if defcon_events:
-                    for ev in defcon_events:
-                        pid = ev["player"]
-                        name = ev["name"]
-                        dc = ev["dc"]
-                        need = ev["need"]
-                        lines_by_fixture.append(f"🛡️ DefCon +2 | {name} — DC {dc}/{need}")
+            # Decide idle behavior after scanning all fixtures
+            if live_count == 0:
+                import time
+                now = time.time()
+                delay = 300.0  # default idle backoff 5 minutes
+                if next_kick_ts:
+                    # Wake ~90s before kickoff, but clamp to [60s, 300s]
+                    eta = max(0.0, next_kick_ts - now - 90.0)
+                    delay = min(300.0, max(60.0, eta))
+                else:
+                    # No more fixtures in current GW; peek at next GW for earliest kickoff
+                    try:
+                        nxt = await fetch_next_gw()
+                        if nxt:
+                            nxt_fixtures = await fetch_fixtures_for_gw(nxt)
+                            earliest: float | None = None
+                            for f2 in nxt_fixtures:
+                                ko2 = f2.get("kickoff_time")
+                                if not ko2:
+                                    continue
+                                try:
+                                    dt2 = datetime.strptime(ko2, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+                                    ts2 = dt2.timestamp()
+                                    if earliest is None or ts2 < earliest:
+                                        earliest = ts2
+                                except Exception:
+                                    pass
+                            if earliest:
+                                eta2 = max(0.0, earliest - now - 120.0)  # wake ~120s before next GW kickoff
+                                delay = max(600.0, eta2)  # if far away, at least 10 minutes
+                    except Exception as e:
+                        print(f"[live] next_gw peek failed: {e}")
+                self._idle_until = now + delay
+                print(f"[live] idle mode engaged; next poll in {int(delay)}s")
+            else:
+                self._idle_until = None
         except Exception as e:
             print(f"[live] tick error: {e}")
 
     @tasks.loop(seconds=POLL_SECONDS, reconnect=True)
     async def _loop(self):
+        # Honor idle scheduling to avoid unnecessary polling between matches
+        if self._idle_until is not None:
+            import time
+            remaining = self._idle_until - time.time()
+            if remaining > 0:
+                await asyncio.sleep(remaining)
         await self._run_tick()
 
     @_loop.before_loop

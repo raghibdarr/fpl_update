@@ -45,6 +45,15 @@ async def fetch_fixtures_for_gw(gw: int) -> List[Dict[str, Any]]:
     return fixtures
 
 
+async def fetch_next_gw() -> Optional[int]:
+    """Return the next gameweek id (is_next), or None if unavailable."""
+    data = await fetch_fpl_data("bootstrap-static/")
+    nxt = next((e for e in data.get("events", []) if e.get("is_next")), None)
+    gw_id = nxt["id"] if nxt else None
+    print(f"[live] fetch_next_gw -> {gw_id}")
+    return gw_id
+
+
 async def fetch_bootstrap_maps() -> Tuple[Dict[int, Dict[str, Any]], Dict[int, Dict[str, Any]]]:
     data = await fetch_fpl_data("bootstrap-static/")
     elements_by_id = {e["id"]: e for e in data["elements"]}
