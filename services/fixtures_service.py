@@ -62,8 +62,9 @@ async def fetch_fixture_data(num_gameweeks, selected_teams=None, sort_method="al
         if current_gw:
             # If all fixtures in the current GW are finished, start at the next GW; otherwise include current GW
             fpl_fixtures = await fetch_fpl_data("fixtures/")
+            # Consider fixtures 'provisionally finished' as complete to advance the grid promptly
             has_unfinished = any(
-                (fx.get('event') == current_gw['id']) and (not fx.get('finished', False))
+                (fx.get('event') == current_gw['id']) and (not (fx.get('finished', False) or fx.get('finished_provisional', False)))
                 for fx in fpl_fixtures
             )
             start_gw = current_gw['id'] if has_unfinished else current_gw['id'] + 1
